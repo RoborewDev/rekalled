@@ -1,0 +1,1177 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway front-end for the Flashcard & Knowledge Platform spec.
+  Question: what should the paste → generate → review → save flow look like?
+  Three variants of the Review screen, switchable via ?variant=A|B|C and the floating bar.
+  All state is in memory. The "API" and CardGenerator are stubs.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ledger — Flashcards prototype</title>
+<link href="https://api.fontshare.com/v2/css?f[]=erode@500,600,700&f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+:root{
+  --text-xs:clamp(.75rem,.7rem + .25vw,.875rem);
+  --text-sm:clamp(.875rem,.8rem + .35vw,1rem);
+  --text-base:clamp(1rem,.95rem + .25vw,1.125rem);
+  --text-lg:clamp(1.125rem,1rem + .75vw,1.5rem);
+  --text-xl:clamp(1.5rem,1.2rem + 1.25vw,2.25rem);
+  --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-5:1.25rem;--space-6:1.5rem;--space-8:2rem;--space-10:2.5rem;--space-12:3rem;--space-16:4rem;
+  --color-bg:#f4f1ea;--color-surface:#fbfaf6;--color-surface-2:#ffffff;--color-offset:#ece8df;--color-offset-2:#e3ded3;
+  --color-border:#d9d3c6;--color-divider:#e6e1d6;
+  --color-text:#1f1d1a;--color-muted:#6f6a61;--color-faint:#a9a397;--color-inverse:#faf8f3;
+  --color-primary:#28466f;--color-primary-hover:#1d3554;--color-primary-hl:#dbe2ec;
+  --color-rule:#c0463c;--color-rule-hl:#f3dcd8;
+  --color-success:#3f6f2a;--color-success-hl:#dbe6d2;
+  --color-warning:#8f4a17;--color-warning-hl:#f1e2d2;
+  --radius-sm:.375rem;--radius-md:.5rem;--radius-lg:.75rem;--radius-full:999px;
+  --shadow-sm:0 1px 2px rgb(31 29 26 / .06);--shadow-md:0 6px 18px -6px rgb(31 29 26 / .18);--shadow-lg:0 24px 48px -16px rgb(31 29 26 / .28);
+  --font-display:'Erode',Georgia,serif;--font-body:'General Sans','Segoe UI',sans-serif;
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--font-body);font-size:var(--text-base);color:var(--color-text);background:var(--color-bg);line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+svg.lucide{width:1.1em;height:1.1em;stroke-width:1.75;flex-shrink:0}
+:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px;border-radius:var(--radius-sm)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);border-radius:var(--radius-md);font-size:var(--text-sm);font-weight:500;transition:background .15s var(--ease),border-color .15s,color .15s;white-space:nowrap;border:1px solid transparent}
+.btn-primary{background:var(--color-primary);color:var(--color-inverse)}
+.btn-primary:hover{background:var(--color-primary-hover)}
+.btn-primary:disabled{background:var(--color-faint);cursor:not-allowed}
+.btn-ghost{color:var(--color-muted)}
+.btn-ghost:hover{background:var(--color-offset);color:var(--color-text)}
+.btn-outline{border-color:var(--color-border);background:var(--color-surface-2)}
+.btn-outline:hover{border-color:var(--color-muted)}
+.btn-danger{color:var(--color-rule)}
+.btn-danger:hover{background:var(--color-rule-hl)}
+.btn-icon{padding:var(--space-2);border-radius:var(--radius-md);color:var(--color-muted);display:inline-flex}
+.btn-icon:hover{background:var(--color-offset);color:var(--color-text)}
+
+/* Sign in */
+.signin{min-height:100%;display:grid;place-items:center;padding:var(--space-8)}
+.signin-card{width:min(440px,100%);background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-10) var(--space-8);box-shadow:var(--shadow-md);position:relative;overflow:hidden}
+.signin-card::before{content:"";position:absolute;left:var(--space-12);top:0;bottom:0;width:1px;background:var(--color-rule);opacity:.5}
+.signin-inner{position:relative;padding-left:var(--space-8)}
+.wordmark{font-family:var(--font-display);font-weight:700;font-size:var(--text-xl);letter-spacing:-.01em;line-height:1.1}
+.signin p{color:var(--color-muted);margin-top:var(--space-3);margin-bottom:var(--space-8);font-size:var(--text-sm)}
+.signin .btn{width:100%;justify-content:center;padding:var(--space-3)}
+.signin small{display:block;margin-top:var(--space-4);color:var(--color-muted);font-size:var(--text-xs)}
+.redirect{position:fixed;inset:0;background:rgb(244 241 234 / .92);display:grid;place-items:center;z-index:50;font-size:var(--text-sm);color:var(--color-muted)}
+.spinner{width:28px;height:28px;border:2px solid var(--color-border);border-top-color:var(--color-primary);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto var(--space-3)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Shell */
+.shell{display:grid;grid-template-columns:260px 1fr;min-height:100%}
+.side{background:var(--color-surface);border-right:1px solid var(--color-divider);padding:var(--space-5) var(--space-3);display:flex;flex-direction:column;gap:var(--space-4);position:sticky;top:0;height:100vh}
+.side .wordmark{font-size:var(--text-lg);padding:0 var(--space-3)}
+.side-label{font-size:var(--text-xs);color:var(--color-faint);text-transform:uppercase;letter-spacing:.08em;padding:0 var(--space-3);display:flex;justify-content:space-between;align-items:center}
+.nav{display:flex;flex-direction:column;gap:2px;overflow:auto}
+.nav button{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);font-size:var(--text-sm);color:var(--color-muted);text-align:left;width:100%}
+.nav button:hover{background:var(--color-offset);color:var(--color-text)}
+.nav button[aria-current=page]{background:var(--color-primary-hl);color:var(--color-primary);font-weight:500}
+.nav .count{margin-left:auto;font-size:var(--text-xs);color:var(--color-faint);font-variant-numeric:tabular-nums}
+.nav .dot{width:7px;height:7px;border-radius:50%;background:var(--color-rule);margin-left:auto}
+.side-foot{margin-top:auto;border-top:1px solid var(--color-divider);padding-top:var(--space-3)}
+.me{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);width:100%;text-align:left}
+.me:hover{background:var(--color-offset)}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--color-primary);color:var(--color-inverse);display:grid;place-items:center;font-size:var(--text-xs);font-weight:600}
+.me span{font-size:var(--text-sm);line-height:1.2}
+.me small{display:block;color:var(--color-faint);font-size:var(--text-xs)}
+.mobile-top{display:none}
+
+main{padding:var(--space-8) clamp(var(--space-4),4vw,var(--space-12)) var(--space-16);max-width:1180px;width:100%}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-6);flex-wrap:wrap}
+.crumb{font-size:var(--text-xs);color:var(--color-muted);display:flex;gap:var(--space-2);align-items:center;margin-bottom:var(--space-2)}
+.crumb button:hover{color:var(--color-text);text-decoration:underline}
+h1{font-family:var(--font-display);font-size:var(--text-xl);font-weight:600;letter-spacing:-.015em;line-height:1.15}
+h2{font-size:var(--text-lg);font-weight:600;line-height:1.3}
+.sub{color:var(--color-muted);font-size:var(--text-sm);margin-top:var(--space-1)}
+.actions{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
+
+/* Deck grid */
+.decks{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--space-5)}
+.deck-tile{position:relative;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-5) var(--space-5) var(--space-5) var(--space-8);text-align:left;min-height:150px;display:flex;flex-direction:column;transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+.deck-tile::before{content:"";position:absolute;left:var(--space-5);top:0;bottom:0;width:1px;background:var(--color-rule);opacity:.45}
+.deck-tile::after{content:"";position:absolute;inset:auto 6px -6px 6px;height:6px;border:1px solid var(--color-border);border-top:0;border-radius:0 0 var(--radius-lg) var(--radius-lg);background:var(--color-surface)}
+.deck-tile:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.deck-tile h3{font-family:var(--font-display);font-size:var(--text-lg);font-weight:600;line-height:1.2}
+.deck-tile .meta{margin-top:auto;display:flex;gap:var(--space-4);font-size:var(--text-xs);color:var(--color-muted);font-variant-numeric:tabular-nums}
+.badge{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--text-xs);padding:2px var(--space-2);border-radius:var(--radius-full);background:var(--color-offset);color:var(--color-muted);font-weight:500}
+.badge-rule{background:var(--color-rule-hl);color:var(--color-rule)}
+.badge-ok{background:var(--color-success-hl);color:var(--color-success)}
+.badge-primary{background:var(--color-primary-hl);color:var(--color-primary)}
+
+/* Tabs */
+.tabs{display:flex;gap:var(--space-1);border-bottom:1px solid var(--color-divider);margin-bottom:var(--space-6)}
+.tabs button{padding:var(--space-2) var(--space-3);font-size:var(--text-sm);color:var(--color-muted);border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;gap:var(--space-2);align-items:center}
+.tabs button[aria-selected=true]{color:var(--color-text);border-color:var(--color-text);font-weight:500}
+
+/* Banner */
+.banner{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);background:var(--color-rule-hl);color:var(--color-rule);font-size:var(--text-sm);margin-bottom:var(--space-5);flex-wrap:wrap}
+.banner b{font-weight:600}
+.banner .btn{margin-left:auto;background:var(--color-surface-2);border-color:var(--color-rule-hl);color:var(--color-rule)}
+
+/* Card list */
+.cards{display:flex;flex-direction:column;gap:var(--space-3)}
+.card-row{display:grid;grid-template-columns:1fr 1fr auto;gap:var(--space-5);align-items:start;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-4) var(--space-5);transition:opacity .25s,transform .25s var(--ease)}
+.card-row.leaving{opacity:0;transform:translateX(12px)}
+.lbl{font-size:var(--text-xs);color:var(--color-faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:var(--space-1)}
+.q{font-weight:500}
+.a{color:var(--color-muted)}
+.src{font-size:var(--text-xs);color:var(--color-faint);margin-top:var(--space-2);display:flex;gap:var(--space-1);align-items:center}
+.row-actions{display:flex;gap:var(--space-1)}
+.field{width:100%;border:1px solid var(--color-border);background:var(--color-surface-2);border-radius:var(--radius-sm);padding:var(--space-2) var(--space-3);font-size:var(--text-sm);resize:vertical;line-height:1.45}
+.field:focus{outline:2px solid var(--color-primary-hl);border-color:var(--color-primary)}
+
+/* Sources list */
+.source-row{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-4) var(--space-5);background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md)}
+.source-row .t{font-weight:500}
+.source-row .m{font-size:var(--text-xs);color:var(--color-muted)}
+.source-row .btn{margin-left:auto}
+
+/* Empty */
+.empty{text-align:center;padding:var(--space-16) var(--space-8);color:var(--color-muted);border:1px dashed var(--color-border);border-radius:var(--radius-lg)}
+.empty .ic{width:56px;height:56px;margin:0 auto var(--space-4);display:grid;place-items:center;border-radius:50%;background:var(--color-offset);color:var(--color-muted)}
+.empty .ic svg{width:24px;height:24px}
+.empty h3{color:var(--color-text);font-size:var(--text-lg);font-weight:600;margin-bottom:var(--space-2)}
+.empty p{max-width:40ch;margin:0 auto var(--space-6);font-size:var(--text-sm)}
+
+/* Sheet (add source) */
+.scrim{position:fixed;inset:0;background:rgb(31 29 26 / .35);z-index:40;display:flex;justify-content:flex-end}
+.scrim.enter{animation:fade .2s}
+.sheet{width:min(640px,100%);height:100%;background:var(--color-surface);box-shadow:var(--shadow-lg);display:flex;flex-direction:column}
+.sheet.enter{animation:slide .28s var(--ease)}
+.sheet header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-5) var(--space-6);border-bottom:1px solid var(--color-divider)}
+.sheet header h2{font-family:var(--font-display);font-size:var(--text-xl);font-weight:600}
+.sheet .body{padding:var(--space-6);overflow:auto;flex:1;display:flex;flex-direction:column;gap:var(--space-5)}
+.sheet footer{padding:var(--space-4) var(--space-6);border-top:1px solid var(--color-divider);display:flex;align-items:center;gap:var(--space-3)}
+.sheet footer .btn-primary{margin-left:auto}
+.form-row label{display:block;font-size:var(--text-sm);font-weight:500;margin-bottom:var(--space-2)}
+.form-row .hint{font-size:var(--text-xs);color:var(--color-muted);margin-top:var(--space-2);display:flex;justify-content:space-between;gap:var(--space-3)}
+.paste{min-height:320px;font-size:var(--text-sm);background:var(--color-surface-2) repeating-linear-gradient(transparent 0 27px,var(--color-divider) 27px 28px);background-attachment:local;line-height:28px;padding:var(--space-1) var(--space-4)}
+.over{color:var(--color-rule);font-weight:500}
+.mode-pick{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-2)}
+.mode-pick button{border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-1);align-items:flex-start;font-size:var(--text-sm);background:var(--color-surface-2);text-align:left}
+.mode-pick button[aria-pressed=true]{border-color:var(--color-primary);box-shadow:0 0 0 1px var(--color-primary)}
+.mode-pick button:disabled{opacity:.55;cursor:not-allowed}
+.mode-pick small{font-size:var(--text-xs);color:var(--color-muted)}
+@keyframes fade{from{opacity:0}}
+@keyframes slide{from{transform:translateX(40px);opacity:.4}}
+
+/* Generating */
+.gen{display:grid;gap:var(--space-3)}
+.skeleton{background:linear-gradient(90deg,var(--color-offset) 25%,var(--color-offset-2) 50%,var(--color-offset) 75%);background-size:200% 100%;animation:shimmer 1.4s ease-in-out infinite;border-radius:var(--radius-sm)}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.sk-card{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-5);display:grid;gap:var(--space-2)}
+.gen-status{display:flex;align-items:center;gap:var(--space-3);font-size:var(--text-sm);color:var(--color-muted);margin-bottom:var(--space-4)}
+.gen-status .spinner{margin:0;width:18px;height:18px}
+.error-box{border:1px solid var(--color-rule-hl);background:var(--color-surface-2);border-radius:var(--radius-lg);padding:var(--space-8);text-align:center}
+.error-box .ic{width:48px;height:48px;border-radius:50%;background:var(--color-rule-hl);color:var(--color-rule);display:grid;place-items:center;margin:0 auto var(--space-4)}
+.error-box p{color:var(--color-muted);font-size:var(--text-sm);max-width:44ch;margin:var(--space-2) auto var(--space-5)}
+
+/* Review shared */
+.review-bar{position:sticky;top:0;z-index:5;background:rgb(244 241 234 / .94);backdrop-filter:blur(6px);display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) 0;margin-bottom:var(--space-4);border-bottom:1px solid var(--color-divider);flex-wrap:wrap}
+.tally{font-size:var(--text-sm);color:var(--color-muted);font-variant-numeric:tabular-nums}
+.tally b{color:var(--color-text)}
+.review-bar .actions{margin-left:auto}
+.check{width:22px;height:22px;border-radius:var(--radius-sm);border:1.5px solid var(--color-border);display:grid;place-items:center;background:var(--color-surface-2);color:transparent;flex-shrink:0;transition:all .15s}
+.check[aria-checked=true]{background:var(--color-primary);border-color:var(--color-primary);color:var(--color-inverse)}
+.check svg{width:14px;height:14px;stroke-width:3}
+.dropped{opacity:.5}
+.dropped .q,.dropped .a{text-decoration:line-through;text-decoration-color:var(--color-faint)}
+.excerpt{font-size:var(--text-xs);color:var(--color-muted);border-left:2px solid var(--color-rule);padding-left:var(--space-3);margin-top:var(--space-3);font-style:italic;line-height:1.5}
+
+/* Variant A — checklist */
+.va-item{display:grid;grid-template-columns:auto 1fr auto;gap:var(--space-4);align-items:start;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-4) var(--space-5);transition:opacity .2s}
+.va-qa{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-5)}
+.va-edit{display:grid;gap:var(--space-2)}
+
+/* Variant B — split */
+.vb{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:var(--space-6);align-items:start}
+.vb-source{position:sticky;top:72px;max-height:calc(100vh - 110px);overflow:auto;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-6) var(--space-6) var(--space-6) var(--space-10);font-family:var(--font-display);font-size:var(--text-base);line-height:1.75;position:sticky}
+.vb-source::before{content:"";position:absolute;left:var(--space-6);top:0;bottom:0;width:1px;background:var(--color-rule);opacity:.4}
+.vb-source h3{font-family:var(--font-body);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--color-faint);margin-bottom:var(--space-3);font-weight:500}
+mark{background:var(--color-primary-hl);color:inherit;border-radius:2px;padding:0 2px;transition:background .2s}
+mark.hot{background:#f5d97a}
+mark.off{background:transparent;text-decoration:underline dotted var(--color-faint)}
+.vb-list{display:flex;flex-direction:column;gap:var(--space-3)}
+.vb-card{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-4);display:grid;grid-template-columns:auto 1fr auto;gap:var(--space-3);align-items:start;transition:border-color .15s,box-shadow .15s}
+.vb-card:hover,.vb-card.hot{border-color:var(--color-primary);box-shadow:0 0 0 1px var(--color-primary)}
+.vb-num{font-size:var(--text-xs);color:var(--color-faint);font-variant-numeric:tabular-nums;padding-top:2px;min-width:2ch}
+
+/* Variant C — triage */
+.vc{display:grid;place-items:center;padding-top:var(--space-4)}
+.vc-progress{display:flex;gap:4px;margin-bottom:var(--space-6);flex-wrap:wrap;justify-content:center}
+.vc-progress i{width:22px;height:4px;border-radius:2px;background:var(--color-offset-2)}
+.vc-progress i.k{background:var(--color-primary)}
+.vc-progress i.d{background:var(--color-rule)}
+.vc-progress i.cur{background:var(--color-text)}
+.vc-stack{position:relative;width:min(560px,100%)}
+.vc-card{position:relative;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);padding:var(--space-8) var(--space-8) var(--space-6) var(--space-12);min-height:320px;display:flex;flex-direction:column;gap:var(--space-4);animation:deal .3s var(--ease)}
+.vc-card::before{content:"";position:absolute;left:var(--space-8);top:0;bottom:0;width:1px;background:var(--color-rule);opacity:.5}
+.vc-stack::before,.vc-stack::after{content:"";position:absolute;inset:0;border:1px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-surface);z-index:-1}
+.vc-stack::before{transform:translate(6px,6px) rotate(.6deg)}
+.vc-stack::after{transform:translate(12px,12px) rotate(1.2deg);z-index:-2}
+.vc-card .q{font-family:var(--font-display);font-size:var(--text-lg);font-weight:600;line-height:1.3}
+.vc-card .a{font-size:var(--text-base)}
+.vc-controls{display:flex;gap:var(--space-3);justify-content:center;margin-top:var(--space-8);flex-wrap:wrap}
+.vc-controls .btn{padding:var(--space-3) var(--space-5)}
+kbd{font-family:var(--font-body);font-size:var(--text-xs);border:1px solid var(--color-border);border-bottom-width:2px;border-radius:4px;padding:0 6px;color:var(--color-muted);background:var(--color-surface)}
+.btn-primary kbd{background:transparent;color:var(--color-inverse);border-color:rgb(255 255 255 / .4)}
+@keyframes deal{from{transform:translateY(10px) rotate(-1deg);opacity:0}}
+.vc-done{text-align:center;max-width:44ch}
+
+/* Toast */
+.toasts{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:var(--space-2);z-index:60;width:max-content;max-width:calc(100vw - 2rem)}
+.toast{background:var(--color-text);color:var(--color-inverse);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);font-size:var(--text-sm);box-shadow:var(--shadow-lg);display:flex;gap:var(--space-3);align-items:center;animation:fade .2s}
+.toast button{color:#9fc0ec;font-weight:500}
+
+/* Profile popover */
+.pop{position:fixed;left:var(--space-3);bottom:72px;width:240px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:var(--space-4);z-index:45;font-size:var(--text-sm);animation:fade .15s}
+.pop .scopes{display:flex;flex-wrap:wrap;gap:var(--space-1);margin:var(--space-2) 0 var(--space-4)}
+.pop code{font-size:var(--text-xs)}
+.pop .muted{color:var(--color-muted);font-size:var(--text-xs)}
+
+/* Prototype switcher — deliberately off-brand */
+.proto{position:fixed;bottom:var(--space-4);left:50%;transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:var(--space-1);background:#111;color:#f5f5f5;border-radius:var(--radius-full);padding:var(--space-1);box-shadow:0 10px 30px rgb(0 0 0 / .35);font-size:var(--text-xs);font-family:ui-monospace,Menlo,monospace}
+.proto button{color:#f5f5f5;padding:var(--space-2) var(--space-3);border-radius:var(--radius-full);display:inline-flex;align-items:center;gap:var(--space-1)}
+.proto button:hover{background:#2a2a2a}
+.proto .lab{padding:0 var(--space-2);min-width:200px;text-align:center;white-space:nowrap}
+.proto .sep{width:1px;height:18px;background:#333}
+.proto button[aria-pressed=true]{background:#7a2620}
+
+/* Responsive */
+@media (max-width:860px){
+  .shell{grid-template-columns:1fr}
+  .side{display:none}
+  .side.open{display:flex;position:fixed;inset:0 auto 0 0;width:280px;z-index:45;box-shadow:var(--shadow-lg)}
+  .mobile-top{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-divider);background:var(--color-surface);position:sticky;top:0;z-index:20}
+  .mobile-top .wordmark{font-size:var(--text-lg)}
+  .card-row{grid-template-columns:1fr;gap:var(--space-3)}
+  .va-qa{grid-template-columns:1fr;gap:var(--space-3)}
+  .vb{grid-template-columns:1fr}
+  .vb-source{position:relative;top:0;max-height:260px}
+  .mode-pick{grid-template-columns:1fr}
+  .sheet footer{padding-bottom:calc(var(--space-16) + var(--space-2))}
+  .vc-controls{margin-bottom:var(--space-12)}
+  .proto .lab{min-width:0}
+  .proto .hide-sm{display:none}
+  .vc-controls kbd{display:none}
+  .vc-controls{display:grid;grid-template-columns:auto 1fr 1fr;width:100%}
+  .vc-controls .btn{justify-content:center}
+  .vc-controls .btn-primary{grid-column:1/-1;order:-1}
+  main{padding-bottom:calc(var(--space-16) + var(--space-8))}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+/* ============================================================
+   STUB API — mirrors the /v1 contract in the spec. In-memory only.
+   ============================================================ */
+const uid = () => Math.random().toString(36).slice(2, 10);
+const MAX_CHARS = 20000, MAX_CARDS = 20;
+
+const SAMPLE = `TanStack Query is a library for fetching, caching and updating server state in web applications. A query key is an array that uniquely identifies a piece of cached data. Stale time is the duration for which cached data is considered fresh and will not be refetched. Garbage collection time is how long inactive query data stays in memory before it is removed. A mutation is an operation that creates, updates or deletes data on the server. Optimistic updates change the cache before the server responds, then roll back if the request fails. Invalidation marks queries as stale so they refetch the next time they are used.`;
+
+const SEED_TEXT = `The CAP theorem states that a distributed data store can provide at most two of three guarantees: consistency, availability and partition tolerance. Consistency means every read receives the most recent write or an error. Availability means every request receives a non-error response. A network partition is a break in communication between nodes. Eventual consistency is a model where replicas converge to the same value if no new updates are made. Raft is a consensus algorithm designed to be easier to understand than Paxos.`;
+
+const db = {
+  me: { id: "6a1f0c2e-9b3d-4e1a-8f55-2c7d1b0e4a91", email: null, display_name: null, scopes: ["decks:read", "decks:write", "cards:generate"] },
+  idName: "Robin Andrew",
+  decks: [], sources: [], cards: [],
+};
+
+function seed() {
+  db.decks = []; db.sources = []; db.cards = [];
+  const d1 = { id: uid(), name: "Distributed systems", created_at: Date.now() - 864e5 * 6 };
+  const d2 = { id: uid(), name: "Interview — React & TanStack", created_at: Date.now() - 864e5 * 2 };
+  db.decks.push(d1, d2);
+  const s1 = { id: uid(), deck_id: d1.id, kind: "text", title: "DDIA ch. 9 notes", content: SEED_TEXT, created_at: Date.now() - 864e5 * 5 };
+  db.sources.push(s1);
+  fakeGenerate(SEED_TEXT).forEach(c => db.cards.push({ ...c, id: uid(), deck_id: d1.id, source_id: s1.id, status: "active", card_type: "basic" }));
+  const s2 = { id: uid(), deck_id: d2.id, kind: "text", title: "TanStack Query docs", content: SAMPLE, created_at: Date.now() - 36e5 * 3 };
+  db.sources.push(s2);
+  fakeGenerate(SAMPLE).forEach(c => db.cards.push({ ...c, id: uid(), deck_id: d2.id, source_id: s2.id, status: "draft", card_type: "basic" }));
+}
+
+/* FakeCardGenerator — deterministic, sentence-based. Real one is AiSdkCardGenerator in FastAPI. */
+function fakeGenerate(text) {
+  const sentences = text.replace(/\s+/g, " ").match(/[^.!?]+[.!?]/g) || [];
+  const out = [];
+  for (const raw of sentences) {
+    const s = raw.trim(); if (s.length < 25) continue;
+    let m, q, a;
+    if ((m = s.match(/^(The |A |An )?(.{3,60}?) (is|are|means|states that) (.+)[.!?]$/i))) {
+      const art = (m[1] || "").toLowerCase();
+      const first = m[2].split(" ")[0];
+      const proper = /[A-Z]/.test(first.slice(1)) || /^[A-Z]{2}/.test(first) || (!art && /^[A-Z]/.test(first) && m[2].split(" ").length === 1);
+      const subj = proper ? m[2] : m[2].charAt(0).toLowerCase() + m[2].slice(1);
+      const verb = m[3].toLowerCase();
+      q = verb === "states that" ? `What does ${art || "the "}${subj} state?` : verb === "means" ? `What does ${subj} mean?` : `What ${verb} ${art}${subj}?`;
+      a = m[4].charAt(0).toUpperCase() + m[4].slice(1) + ".";
+    } else {
+      const words = s.split(" ").slice(0, 5).join(" ");
+      q = `What does the source say about “${words}…”?`; a = s;
+    }
+    out.push({ question: q, answer: a, source_excerpt: s });
+    if (out.length >= MAX_CARDS) break;
+  }
+  return out;
+}
+
+const api = {
+  delay: (ms = 350) => new Promise(r => setTimeout(r, ms)),
+  async listDecks() { await this.delay(250); return db.decks.map(d => ({ ...d, card_count: db.cards.filter(c => c.deck_id === d.id && c.status === "active").length, draft_count: db.cards.filter(c => c.deck_id === d.id && c.status === "draft").length })); },
+  async createDeck(name) { await this.delay(200); const d = { id: uid(), name, created_at: Date.now() }; db.decks.unshift(d); return d; },
+  async renameDeck(id, name) { await this.delay(150); db.decks.find(d => d.id === id).name = name; },
+  async deleteDeck(id) { await this.delay(150); db.decks = db.decks.filter(d => d.id !== id); db.sources = db.sources.filter(s => s.deck_id !== id); db.cards = db.cards.filter(c => c.deck_id !== id); },
+  async createSourceAndGenerate(deck_id, title, text) {
+    if (text.length > MAX_CHARS) { const e = new Error("Text is longer than 20,000 characters"); e.status = 413; throw e; }
+    const s = { id: uid(), deck_id, kind: "text", title: title || text.slice(0, 48).trim() + "…", content: text, created_at: Date.now() };
+    db.sources.unshift(s); // Source persists before Generation
+    await this.generate(s.id);
+    return s;
+  },
+  async generate(source_id) {
+    await this.delay(2200);
+    if (ui.simulateError) { const e = new Error("The model returned an invalid response."); e.status = 502; e.source_id = source_id; throw e; }
+    const s = db.sources.find(x => x.id === source_id);
+    const drafts = fakeGenerate(s.content);
+    if (!drafts.length) { const e = new Error("No cards could be generated from this text."); e.status = 422; e.source_id = source_id; throw e; }
+    drafts.forEach(c => db.cards.push({ ...c, id: uid(), deck_id: s.deck_id, source_id, status: "draft", card_type: "basic" }));
+  },
+  async commitReview(source_id, kept) {
+    await this.delay(450);
+    const keptIds = new Set(kept.map(k => k.card_id));
+    db.cards = db.cards.filter(c => !(c.source_id === source_id && c.status === "draft" && !keptIds.has(c.id)));
+    kept.forEach(k => { const c = db.cards.find(x => x.id === k.card_id); if (c) Object.assign(c, { question: k.question, answer: k.answer, status: "active" }); });
+    return kept.length;
+  },
+  async updateCard(id, patch) { await this.delay(150); Object.assign(db.cards.find(c => c.id === id), patch); },
+  async deleteCard(id) { await this.delay(150); const c = db.cards.find(x => x.id === id); db.cards = db.cards.filter(x => x.id !== id); return c; },
+  restoreCard(c) { db.cards.push(c); },
+};
+
+/* ============================================================
+   UI STATE + MEMORY ROUTER (opaque-origin safe)
+   ============================================================ */
+const VARIANTS = { A: "Checklist", B: "Split view with source", C: "One card at a time" };
+const params = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
+const ui = {
+  authed: false, route: { name: "decks" }, variant: VARIANTS[params.get("variant")] ? params.get("variant") : "A",
+  simulateError: false, sideOpen: false, profileOpen: false, sheet: null, tab: "cards",
+  editing: null, review: null, generating: null, genError: null, decksCache: [],
+};
+function setVariantInUrl(v) { try { const u = new URL(location.href); u.searchParams.set("variant", v); history.replaceState(null, "", u); } catch {} }
+function go(name, p = {}) { ui.route = { name, ...p }; ui.sideOpen = false; ui.profileOpen = false; ui.editing = null; if (name !== "review") ui.review = null; render(); window.scrollTo(0, 0); }
+
+/* helpers */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ago = t => { const m = Math.round((Date.now() - t) / 6e4); if (m < 1) return "just now"; if (m < 60) return m + "m ago"; const h = Math.round(m / 60); if (h < 24) return h + "h ago"; return Math.round(h / 24) + "d ago"; };
+const ic = n => `<i data-lucide="${n}"></i>`;
+function toast(msg, action) {
+  const el = document.createElement("div"); el.className = "toast";
+  el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button>${esc(action.label)}</button>` : ""}`;
+  if (action) el.querySelector("button").onclick = () => { action.fn(); el.remove(); };
+  $("#toasts").appendChild(el); setTimeout(() => el.remove(), 4500);
+}
+const initials = n => n.split(" ").map(x => x[0]).slice(0, 2).join("");
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+async function render() {
+  const app = $("#app");
+  if (!ui.authed) { app.innerHTML = viewSignIn(); bindSignIn(); finish(); return; }
+  ui.decksCache = await api.listDecks();
+  app.innerHTML = `
+    <div class="mobile-top"><button class="btn-icon" id="openSide" aria-label="Open menu">${ic("menu")}</button><span class="wordmark">Ledger</span></div>
+    <div class="shell">${viewSide()}<main id="main">${await viewMain()}</main></div>
+    ${ui.sheet ? viewSheet() : ""}
+    ${ui.profileOpen ? viewProfile() : ""}
+    ${viewProto()}`;
+  bindShell(); bindMain(); finish();
+}
+function finish() { if (window.lucide) lucide.createIcons(); }
+
+function viewSignIn() {
+  return `<div class="signin"><div class="signin-card"><div class="signin-inner">
+    <div class="wordmark">Ledger</div>
+    <p>Turn what you read into flash cards. Keep every card tied to where it came from.</p>
+    <button class="btn btn-primary" id="signin">${ic("log-in")} Continue with Logto</button>
+    <small>Hosted sign-in · OIDC + PKCE · no passwords stored here</small>
+  </div></div></div>${viewProto()}`;
+}
+function bindSignIn() {
+  $("#signin").onclick = () => {
+    const r = document.createElement("div"); r.className = "redirect";
+    r.innerHTML = `<div><div class="spinner"></div>Redirecting to Logto…</div>`; document.body.appendChild(r);
+    setTimeout(() => { r.innerHTML = `<div><div class="spinner"></div>Handling /callback…</div>`; }, 900);
+    setTimeout(() => { r.remove(); ui.authed = true; go(ui.route.name, ui.route); toast(`Signed in as ${db.idName}`); }, 1700);
+  };
+  bindProto();
+}
+
+function viewSide() {
+  const r = ui.route;
+  return `<aside class="side ${ui.sideOpen ? "open" : ""}">
+    <div class="wordmark">Ledger</div>
+    <nav class="nav" aria-label="Main">
+      <button data-go="decks" ${r.name === "decks" ? 'aria-current="page"' : ""}>${ic("layers")} All decks</button>
+      <button disabled title="Roadmap" style="opacity:.55;cursor:not-allowed">${ic("graduation-cap")} Study <span class="badge" style="margin-left:auto">soon</span></button>
+      <button disabled title="Roadmap" style="opacity:.55;cursor:not-allowed">${ic("notebook-pen")} Notes <span class="badge" style="margin-left:auto">soon</span></button>
+    </nav>
+    <div class="side-label"><span>Decks</span><button class="btn-icon" id="sideNew" aria-label="New deck">${ic("plus")}</button></div>
+    <nav class="nav" aria-label="Decks">
+      ${ui.decksCache.map(d => `<button data-deck="${d.id}" ${(r.deckId === d.id) ? 'aria-current="page"' : ""}>${ic("book-open")}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>${d.draft_count ? '<span class="dot" title="Drafts waiting"></span>' : `<span class="count">${d.card_count}</span>`}</button>`).join("")}
+    </nav>
+    <div class="side-foot"><button class="me" id="me"><div class="avatar">${initials(db.idName)}</div><span>${esc(db.idName)}<small>Profile & sign out</small></span></button></div>
+  </aside>`;
+}
+
+function viewProfile() {
+  return `<div class="pop" role="dialog" aria-label="Profile">
+    <div style="font-weight:600">${esc(db.idName)}</div>
+    <div class="muted">Display name from the ID token claims</div>
+    <div style="margin-top:var(--space-3)" class="muted">GET /v1/me → scopes</div>
+    <div class="scopes">${db.me.scopes.map(s => `<span class="badge badge-primary"><code>${s}</code></span>`).join("")}</div>
+    <div class="muted" style="margin-bottom:var(--space-3)">id <code>${db.me.id.slice(0, 8)}…</code> · email <code>null</code></div>
+    <button class="btn btn-outline" id="signout" style="width:100%;justify-content:center">${ic("log-out")} Sign out</button>
+  </div>`;
+}
+
+async function viewMain() {
+  const r = ui.route;
+  if (r.name === "decks") return viewDecks();
+  if (r.name === "deck") return viewDeck(r.deckId);
+  if (r.name === "generating") return viewGenerating();
+  if (r.name === "review") return viewReview(r.sourceId);
+  return "";
+}
+
+function viewDecks() {
+  const ds = ui.decksCache;
+  const head = `<div class="page-head"><div><h1>Your decks</h1><p class="sub">${ds.length} decks · ${ds.reduce((a, d) => a + d.card_count, 0)} cards</p></div>
+    <div class="actions"><button class="btn btn-primary" id="newDeck">${ic("plus")} New deck</button></div></div>`;
+  if (!ds.length) return head + `<div class="empty"><div class="ic">${ic("layers")}</div><h3>Start your first deck</h3><p>A deck groups cards about one topic. Create one, then paste in text to generate cards.</p><button class="btn btn-primary" id="newDeck2">${ic("plus")} New deck</button></div>`;
+  return head + `<div class="decks">${ds.map(d => `
+    <button class="deck-tile" data-deck="${d.id}">
+      <h3>${esc(d.name)}</h3>
+      ${d.draft_count ? `<span class="badge badge-rule" style="margin-top:var(--space-2);align-self:flex-start">${ic("file-pen")} ${d.draft_count} drafts to review</span>` : ""}
+      <div class="meta"><span>${d.card_count} cards</span><span>${db.sources.filter(s => s.deck_id === d.id).length} sources</span><span>${ago(d.created_at)}</span></div>
+    </button>`).join("")}</div>`;
+}
+
+function viewDeck(id) {
+  const d = db.decks.find(x => x.id === id); if (!d) return `<div class="empty"><h3>Deck not found</h3><p>It may have been deleted.</p><button class="btn btn-outline" data-go="decks">Back to decks</button></div>`;
+  const active = db.cards.filter(c => c.deck_id === id && c.status === "active");
+  const sources = db.sources.filter(s => s.deck_id === id);
+  const pending = sources.filter(s => db.cards.some(c => c.source_id === s.id && c.status === "draft"));
+  const nameField = ui.editing === "deckname"
+    ? `<input class="field" id="deckName" value="${esc(d.name)}" style="font-family:var(--font-display);font-size:var(--text-lg);max-width:420px" />`
+    : `<h1>${esc(d.name)}</h1>`;
+  let body = "";
+  if (ui.tab === "cards") {
+    body = !active.length
+      ? `<div class="empty"><div class="ic">${ic("square-stack")}</div><h3>No cards yet</h3><p>Paste an article, docs page or your own notes. Ledger drafts the cards; you decide what to keep.</p><button class="btn btn-primary" data-add>${ic("clipboard-paste")} Add text</button></div>`
+      : `<div class="cards">${active.map(c => viewCardRow(c)).join("")}</div>`;
+  } else {
+    body = !sources.length
+      ? `<div class="empty"><div class="ic">${ic("file-text")}</div><h3>No sources yet</h3><p>Every card links back to the source it came from.</p><button class="btn btn-primary" data-add>${ic("clipboard-paste")} Add text</button></div>`
+      : `<div class="cards">${sources.map(s => { const dr = db.cards.filter(c => c.source_id === s.id && c.status === "draft").length; const ac = db.cards.filter(c => c.source_id === s.id && c.status === "active").length;
+          return `<div class="source-row">${ic("file-text")}<div><div class="t">${esc(s.title)}</div><div class="m">Pasted text · ${s.content.length.toLocaleString()} chars · ${ac} cards · ${ago(s.created_at)}</div></div>
+          ${dr ? `<button class="btn btn-outline" data-review="${s.id}">${ic("file-pen")} Review ${dr} drafts</button>` : ac ? `<span class="badge badge-ok" style="margin-left:auto">${ic("check")} Reviewed</span>` : `<button class="btn btn-outline" data-retry="${s.id}">${ic("refresh-cw")} Generate</button>`}</div>`; }).join("")}</div>`;
+  }
+  return `<div class="page-head"><div><div class="crumb"><button data-go="decks">Decks</button>${ic("chevron-right")}<span>${esc(d.name)}</span></div>${nameField}
+      <p class="sub">${active.length} cards · ${sources.length} sources</p></div>
+    <div class="actions">
+      ${ui.editing === "deckname" ? `<button class="btn btn-primary" id="saveName">Save</button><button class="btn btn-ghost" id="cancelName">Cancel</button>` :
+      `<button class="btn btn-ghost" id="rename">${ic("pencil")} Rename</button><button class="btn btn-ghost btn-danger" id="delDeck">${ic("trash-2")} Delete</button><button class="btn btn-primary" data-add>${ic("clipboard-paste")} Add text</button>`}
+    </div></div>
+    ${pending.map(s => `<div class="banner">${ic("file-pen")}<span><b>${db.cards.filter(c => c.source_id === s.id && c.status === "draft").length} draft cards</b> from “${esc(s.title)}” are waiting for review.</span><button class="btn btn-outline" data-review="${s.id}">Review now</button></div>`).join("")}
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="cards" aria-selected="${ui.tab === "cards"}">${ic("square-stack")} Cards <span class="badge">${active.length}</span></button>
+      <button role="tab" data-tab="sources" aria-selected="${ui.tab === "sources"}">${ic("file-text")} Sources <span class="badge">${sources.length}</span></button>
+    </div>${body}`;
+}
+
+function viewCardRow(c) {
+  const s = db.sources.find(x => x.id === c.source_id);
+  if (ui.editing === c.id) return `<div class="card-row" data-row="${c.id}">
+    <div><div class="lbl">Question</div><textarea class="field" rows="2" data-f="question">${esc(c.question)}</textarea></div>
+    <div><div class="lbl">Answer</div><textarea class="field" rows="3" data-f="answer">${esc(c.answer)}</textarea></div>
+    <div class="row-actions"><button class="btn btn-primary" data-save="${c.id}">Save</button><button class="btn btn-ghost" data-cancel>Cancel</button></div></div>`;
+  return `<div class="card-row" data-row="${c.id}">
+    <div><div class="lbl">Question</div><div class="q">${esc(c.question)}</div>${s ? `<div class="src">${ic("link-2")} ${esc(s.title)}</div>` : ""}</div>
+    <div><div class="lbl">Answer</div><div class="a">${esc(c.answer)}</div></div>
+    <div class="row-actions"><button class="btn-icon" data-edit="${c.id}" aria-label="Edit card">${ic("pencil")}</button><button class="btn-icon" data-del="${c.id}" aria-label="Delete card">${ic("trash-2")}</button></div></div>`;
+}
+
+function viewSheet() {
+  const sh = ui.sheet; const len = sh.text.length; const over = len > MAX_CHARS;
+  const en = sh.fresh ? "enter" : ""; sh.fresh = false;
+  return `<div class="scrim ${en}" id="scrim"><div class="sheet ${en}" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <header><h2 id="sheetTitle">Add a source</h2><button class="btn-icon" id="closeSheet" aria-label="Close">${ic("x")}</button></header>
+    <div class="body">
+      <div class="form-row"><label>Source type</label>
+        <div class="mode-pick">
+          <button aria-pressed="true">${ic("clipboard-paste")}<span>Paste text</span><small>Available now</small></button>
+          <button disabled>${ic("link")}<span>From a URL</span><small>Roadmap</small></button>
+          <button disabled>${ic("file-up")}<span>Upload PDF</span><small>Roadmap</small></button>
+        </div></div>
+      <div class="form-row"><label for="srcTitle">Title <span style="color:var(--color-faint);font-weight:400">(optional)</span></label><input class="field" id="srcTitle" value="${esc(sh.title)}" placeholder="e.g. TanStack Query docs — caching" /></div>
+      <div class="form-row"><label for="srcText">Text</label><textarea class="field paste" id="srcText" placeholder="Paste an article, docs page or your own notes…">${esc(sh.text)}</textarea>
+        <div class="hint"><button class="btn-ghost" id="useSample" style="text-decoration:underline">Use sample text</button><span id="counter" class="${over ? "over" : ""}">${len.toLocaleString()} / ${MAX_CHARS.toLocaleString()} characters${over ? " — too long, split it into smaller sources" : ""}</span></div></div>
+      <p style="font-size:var(--text-xs);color:var(--color-muted)">${ic("sparkles")} The model chooses how many cards to make, up to ${MAX_CARDS}. You'll review every draft before it's saved.</p>
+    </div>
+    <footer><span style="font-size:var(--text-xs);color:var(--color-faint)">Adding to <b style="color:var(--color-muted)">${esc(db.decks.find(d => d.id === ui.route.deckId)?.name)}</b></span>
+      <button class="btn btn-primary" id="generate" ${!len || over ? "disabled" : ""}>${ic("sparkles")} Generate cards</button></footer>
+  </div></div>`;
+}
+
+function viewGenerating() {
+  if (ui.genError) return `<div class="page-head"><div><div class="crumb"><button data-deck="${ui.route.deckId}">Back to deck</button></div><h1>Generation failed</h1></div></div>
+    <div class="error-box"><div class="ic">${ic("triangle-alert")}</div><h2>We couldn't generate cards</h2><p>${esc(ui.genError.message)} Your text is saved as a source, so you can try again without pasting it.</p>
+    <div class="actions" style="justify-content:center"><button class="btn btn-primary" data-retry="${ui.genError.source_id}">${ic("refresh-cw")} Try again</button><button class="btn btn-ghost" data-deck="${ui.route.deckId}">Back to deck</button></div></div>`;
+  return `<div class="page-head"><div><div class="crumb"><span>${esc(db.decks.find(d => d.id === ui.route.deckId)?.name)}</span></div><h1>Drafting cards…</h1><p class="sub">Reading your text and writing question–answer pairs.</p></div></div>
+    <div class="gen-status"><div class="spinner"></div><span id="genMsg">Sending to the model</span></div>
+    <div class="gen">${[0, 1, 2, 3].map(() => `<div class="sk-card"><div class="skeleton" style="height:14px;width:30%"></div><div class="skeleton" style="height:18px;width:78%"></div><div class="skeleton" style="height:14px;width:92%"></div><div class="skeleton" style="height:14px;width:60%"></div></div>`).join("")}</div>`;
+}
+
+/* ----- Review: shared state ----- */
+function ensureReview(sourceId) {
+  if (ui.review && ui.review.sourceId === sourceId) return ui.review;
+  const drafts = db.cards.filter(c => c.source_id === sourceId && c.status === "draft");
+  ui.review = { sourceId, items: drafts.map(c => ({ id: c.id, question: c.question, answer: c.answer, excerpt: c.source_excerpt, keep: true, editing: false })), idx: 0, hot: null, saving: false };
+  return ui.review;
+}
+function viewReview(sourceId) {
+  const s = db.sources.find(x => x.id === sourceId); const rv = ensureReview(sourceId);
+  const kept = rv.items.filter(i => i.keep).length;
+  if (!rv.items.length) return `<div class="empty"><div class="ic">${ic("check")}</div><h3>Nothing to review</h3><p>All drafts from this source have been reviewed.</p><button class="btn btn-outline" data-deck="${s.deck_id}">Back to deck</button></div>`;
+  const head = `<div class="page-head" style="margin-bottom:var(--space-2)"><div><div class="crumb"><button data-deck="${s.deck_id}">${esc(db.decks.find(d => d.id === s.deck_id)?.name)}</button>${ic("chevron-right")}<span>Review</span></div>
+    <h1>Review ${rv.items.length} draft cards</h1><p class="sub">From “${esc(s.title)}”. Everything is kept unless you drop it.</p></div></div>`;
+  const bar = `<div class="review-bar"><span class="tally"><b>${kept}</b> kept · <b>${rv.items.length - kept}</b> dropped</span>
+    <div class="actions">${ui.variant !== "C" ? `<button class="btn btn-ghost" id="keepAll">Keep all</button>` : ""}<button class="btn btn-primary" id="commit" ${rv.saving ? "disabled" : ""}>${rv.saving ? '<div class="spinner" style="width:14px;height:14px;margin:0;border-width:2px"></div> Saving' : `${ic("check")} Save ${kept} cards`}</button></div></div>`;
+  const body = ui.variant === "A" ? reviewA(rv) : ui.variant === "B" ? reviewB(rv, s) : reviewC(rv);
+  return head + bar + body;
+}
+const checkBtn = i => `<button class="check" role="checkbox" aria-checked="${i.keep}" aria-label="Keep card" data-toggle="${i.id}">${ic("check")}</button>`;
+function editBlock(i) {
+  return `<div class="va-edit"><div><div class="lbl">Question</div><textarea class="field" rows="2" data-rf="question" data-id="${i.id}">${esc(i.question)}</textarea></div>
+    <div><div class="lbl">Answer</div><textarea class="field" rows="3" data-rf="answer" data-id="${i.id}">${esc(i.answer)}</textarea></div>
+    <div><button class="btn btn-outline" data-redit="${i.id}">${ic("check")} Done</button></div></div>`;
+}
+
+/* Variant A — dense checklist: every draft visible, inline edit, excerpt under each */
+function reviewA(rv) {
+  return `<div class="cards">${rv.items.map(i => `<div class="va-item ${i.keep ? "" : "dropped"}">${checkBtn(i)}
+    <div>${i.editing ? editBlock(i) : `<div class="va-qa"><div><div class="lbl">Question</div><div class="q">${esc(i.question)}</div></div><div><div class="lbl">Answer</div><div class="a">${esc(i.answer)}</div></div></div>`}
+      <div class="excerpt">${esc(i.excerpt)}</div></div>
+    <div class="row-actions">${i.editing ? "" : `<button class="btn-icon" data-redit="${i.id}" aria-label="Edit">${ic("pencil")}</button>`}</div></div>`).join("")}</div>`;
+}
+
+/* Variant B — split: source on the left with excerpt highlights, drafts on the right */
+function reviewB(rv, s) {
+  let html = esc(s.content);
+  rv.items.forEach((i, n) => { const e = esc(i.excerpt); const at = html.indexOf(e); if (at >= 0) html = html.slice(0, at) + `<mark data-mark="${i.id}" class="${rv.hot === i.id ? "hot" : ""} ${i.keep ? "" : "off"}">${e}<sup style="font-family:var(--font-body);font-size:.65em;color:var(--color-primary);padding-left:2px">${n + 1}</sup></mark>` + html.slice(at + e.length); });
+  return `<div class="vb"><article class="vb-source"><h3>Source · ${esc(s.title)}</h3>${html}</article>
+    <div class="vb-list">${rv.items.map((i, n) => `<div class="vb-card ${i.keep ? "" : "dropped"} ${rv.hot === i.id ? "hot" : ""}" data-hover="${i.id}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:var(--space-2)">${checkBtn(i)}<span class="vb-num">${n + 1}</span></div>
+      <div>${i.editing ? editBlock(i) : `<div class="q">${esc(i.question)}</div><div class="a" style="margin-top:var(--space-1);font-size:var(--text-sm)">${esc(i.answer)}</div>`}</div>
+      <div>${i.editing ? "" : `<button class="btn-icon" data-redit="${i.id}" aria-label="Edit">${ic("pencil")}</button>`}</div></div>`).join("")}</div></div>`;
+}
+
+/* Variant C — triage: one card at a time, keyboard-driven */
+function reviewC(rv) {
+  const done = rv.idx >= rv.items.length;
+  const prog = `<div class="vc-progress" aria-hidden="true">${rv.items.map((i, n) => `<i class="${n === rv.idx ? "cur" : n < rv.idx ? (i.keep ? "k" : "d") : ""}"></i>`).join("")}</div>`;
+  if (done) { const k = rv.items.filter(i => i.keep).length;
+    return `<div class="vc">${prog}<div class="vc-done"><div class="empty" style="border:0;padding:var(--space-8)"><div class="ic">${ic("party-popper")}</div><h3>All ${rv.items.length} drafts triaged</h3><p>You're keeping ${k}. Save to add them to the deck, or step back to change your mind.</p>
+      <div class="actions" style="justify-content:center"><button class="btn btn-outline" data-step="-1">${ic("arrow-left")} Back</button><button class="btn btn-primary" data-commit2>${ic("check")} Save ${k} cards</button></div></div></div></div>`; }
+  const i = rv.items[rv.idx];
+  return `<div class="vc">${prog}<div class="vc-stack"><div class="vc-card ${i.keep ? "" : "dropped"}" key="${i.id}">
+    <div class="lbl">Card ${rv.idx + 1} of ${rv.items.length}</div>
+    ${i.editing ? editBlock(i) : `<div class="q">${esc(i.question)}</div><div class="a">${esc(i.answer)}</div>`}
+    <div class="excerpt" style="margin-top:auto">${esc(i.excerpt)}</div></div></div>
+    <div class="vc-controls">
+      <button class="btn btn-outline" data-step="-1" ${rv.idx === 0 ? "disabled" : ""}>${ic("arrow-left")}</button>
+      <button class="btn btn-outline btn-danger" data-triage="drop">${ic("x")} Drop <kbd>D</kbd></button>
+      <button class="btn btn-outline" data-redit="${i.id}">${ic("pencil")} Edit <kbd>E</kbd></button>
+      <button class="btn btn-primary" data-triage="keep">${ic("check")} Keep <kbd>K</kbd></button>
+    </div></div>`;
+}
+
+function viewProto() {
+  return `<div class="proto" role="toolbar" aria-label="Prototype controls">
+    <button id="pPrev" aria-label="Previous variant">${ic("chevron-left")}</button>
+    <span class="lab">Review ${ui.variant}<span class="hide-sm"> — ${VARIANTS[ui.variant]}</span></span>
+    <button id="pNext" aria-label="Next variant">${ic("chevron-right")}</button>
+    <span class="sep"></span>
+    <button id="pErr" aria-pressed="${ui.simulateError}" title="Make the next Generation fail">${ic("zap")}<span class="hide-sm">Fail next</span></button>
+    <button id="pReset" title="Reset data">${ic("rotate-ccw")}<span class="hide-sm">Reset</span></button>
+  </div>`;
+}
+
+/* ============================================================
+   BINDINGS
+   ============================================================ */
+function bindProto() {
+  const cyc = d => { const k = Object.keys(VARIANTS); ui.variant = k[(k.indexOf(ui.variant) + d + k.length) % k.length]; setVariantInUrl(ui.variant); if (ui.review) ui.review.idx = 0; if (ui.authed && ui.route.name !== "review") { const s = db.sources.find(x => db.cards.some(c => c.source_id === x.id && c.status === "draft")); if (s) { ui.route = { name: "review", sourceId: s.id, deckId: s.deck_id }; } } render(); };
+  $("#pPrev").onclick = () => cyc(-1); $("#pNext").onclick = () => cyc(1);
+  $("#pErr").onclick = () => { ui.simulateError = !ui.simulateError; render(); toast(ui.simulateError ? "Next Generation will fail" : "Generation will succeed"); };
+  $("#pReset").onclick = () => { seed(); ui.review = null; ui.sheet = null; ui.genError = null; ui.tab = "cards"; go("decks"); toast("Prototype data reset"); };
+}
+window.addEventListener("keydown", e => {
+  const t = e.target; const typing = t.matches?.("input,textarea,[contenteditable]");
+  if (e.key === "Escape") { if (ui.sheet) { ui.sheet = null; render(); } else if (ui.profileOpen) { ui.profileOpen = false; render(); } return; }
+  if (typing) return;
+  if (e.key === "ArrowLeft" && !(ui.variant === "C" && ui.route.name === "review")) $("#pPrev")?.click();
+  if (e.key === "ArrowRight" && !(ui.variant === "C" && ui.route.name === "review")) $("#pNext")?.click();
+  if (ui.route.name === "review" && ui.variant === "C" && ui.review) {
+    const k = e.key.toLowerCase();
+    if (k === "k") triage(true); if (k === "d") triage(false);
+    if (k === "e") { const i = ui.review.items[ui.review.idx]; if (i) { i.editing = true; render(); } }
+    if (e.key === "ArrowLeft") step(-1); if (e.key === "ArrowRight") step(1);
+  }
+});
+function triage(keep) { const rv = ui.review; const i = rv.items[rv.idx]; if (!i) return; i.keep = keep; i.editing = false; rv.idx++; render(); }
+function step(d) { const rv = ui.review; rv.idx = Math.max(0, Math.min(rv.items.length, rv.idx + d)); render(); }
+
+function bindShell() {
+  bindProto();
+  $("#openSide") && ($("#openSide").onclick = () => { ui.sideOpen = true; render(); });
+  $("#me").onclick = () => { ui.profileOpen = !ui.profileOpen; render(); };
+  $("#signout") && ($("#signout").onclick = () => { ui.authed = false; ui.profileOpen = false; ui.route = { name: "decks" }; render(); toast("Signed out"); });
+  $("#sideNew").onclick = newDeck;
+  document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
+  document.querySelectorAll("[data-deck]").forEach(b => b.onclick = () => { ui.tab = "cards"; ui.genError = null; go("deck", { deckId: b.dataset.deck }); });
+  if (ui.sheet) {
+    $("#closeSheet").onclick = () => { ui.sheet = null; render(); };
+    $("#scrim").onclick = e => { if (e.target.id === "scrim") { ui.sheet = null; render(); } };
+    $("#srcTitle").oninput = e => ui.sheet.title = e.target.value;
+    $("#srcText").oninput = e => { ui.sheet.text = e.target.value; const len = e.target.value.length, over = len > MAX_CHARS; const c = $("#counter"); c.className = over ? "over" : ""; c.textContent = `${len.toLocaleString()} / ${MAX_CHARS.toLocaleString()} characters${over ? " — too long, split it into smaller sources" : ""}`; $("#generate").disabled = !len || over; };
+    $("#useSample").onclick = () => { ui.sheet.text = SAMPLE; if (!ui.sheet.title) ui.sheet.title = "TanStack Query — core concepts"; render(); };
+    $("#generate").onclick = startGenerate;
+    setTimeout(() => $("#srcText")?.focus(), 50);
+  }
+}
+
+async function newDeck() {
+  const name = "Untitled deck";
+  const d = await api.createDeck(name); ui.tab = "cards"; ui.editing = null; go("deck", { deckId: d.id }); ui.editing = "deckname"; render();
+  setTimeout(() => { const f = $("#deckName"); f?.focus(); f?.select(); }, 30);
+}
+
+async function startGenerate() {
+  const { title, text } = ui.sheet; const deckId = ui.route.deckId; ui.sheet = null; ui.genError = null;
+  go("generating", { deckId });
+  const msgs = ["Sending to the model", "Writing question–answer pairs", "Checking each card against your text"]; let m = 0;
+  const t = setInterval(() => { const el = $("#genMsg"); if (el) el.textContent = msgs[++m % msgs.length]; }, 800);
+  try { const s = await api.createSourceAndGenerate(deckId, title, text); clearInterval(t); ui.review = null; go("review", { sourceId: s.id, deckId }); }
+  catch (e) { clearInterval(t); ui.genError = e; if (!e.source_id) e.source_id = db.sources[0]?.id; render(); }
+}
+async function retry(sourceId) {
+  const s = db.sources.find(x => x.id === sourceId); ui.genError = null; ui.simulateError = false; go("generating", { deckId: s.deck_id });
+  try { await api.generate(sourceId); ui.review = null; go("review", { sourceId, deckId: s.deck_id }); } catch (e) { ui.genError = e; render(); }
+}
+
+function bindMain() {
+  const r = ui.route;
+  document.querySelectorAll("#newDeck,#newDeck2").forEach(b => b.onclick = newDeck);
+  document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => { ui.sheet = { title: "", text: "", fresh: true }; render(); });
+  document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { ui.tab = b.dataset.tab; render(); });
+  document.querySelectorAll("[data-review]").forEach(b => b.onclick = () => go("review", { sourceId: b.dataset.review, deckId: r.deckId }));
+  document.querySelectorAll("[data-retry]").forEach(b => b.onclick = () => retry(b.dataset.retry));
+  if (r.name === "deck") {
+    $("#rename") && ($("#rename").onclick = () => { ui.editing = "deckname"; render(); setTimeout(() => $("#deckName")?.select(), 20); });
+    const saveName = async () => { const v = $("#deckName").value.trim(); if (!v) return; await api.renameDeck(r.deckId, v); ui.editing = null; render(); toast("Deck renamed"); };
+    $("#saveName") && ($("#saveName").onclick = saveName);
+    $("#deckName") && ($("#deckName").onkeydown = e => { if (e.key === "Enter") saveName(); });
+    $("#cancelName") && ($("#cancelName").onclick = () => { ui.editing = null; render(); });
+    $("#delDeck") && ($("#delDeck").onclick = async () => { const d = db.decks.find(x => x.id === r.deckId); const snap = { d, s: db.sources.filter(x => x.deck_id === d.id), c: db.cards.filter(x => x.deck_id === d.id) };
+      await api.deleteDeck(d.id); go("decks"); toast(`Deleted “${d.name}”`, { label: "Undo", fn: () => { db.decks.unshift(snap.d); db.sources.push(...snap.s); db.cards.push(...snap.c); render(); } }); });
+    document.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => { ui.editing = b.dataset.edit; render(); });
+    document.querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => { ui.editing = null; render(); });
+    document.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => { const row = b.closest(".card-row"); const patch = { question: row.querySelector('[data-f="question"]').value, answer: row.querySelector('[data-f="answer"]').value };
+      Object.assign(db.cards.find(c => c.id === b.dataset.save), patch); ui.editing = null; render(); api.updateCard(b.dataset.save, patch); toast("Card updated"); });
+    document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => { const row = b.closest(".card-row"); row.classList.add("leaving");
+      const c = await api.deleteCard(b.dataset.del); setTimeout(() => { render(); toast("Card deleted", { label: "Undo", fn: () => { api.restoreCard(c); render(); } }); }, 200); });
+  }
+  if (r.name === "review" && ui.review) {
+    const rv = ui.review;
+    document.querySelectorAll("[data-toggle]").forEach(b => b.onclick = () => { const i = rv.items.find(x => x.id === b.dataset.toggle); i.keep = !i.keep; render(); });
+    document.querySelectorAll("[data-redit]").forEach(b => b.onclick = () => { const i = rv.items.find(x => x.id === b.dataset.redit); i.editing = !i.editing; render(); });
+    document.querySelectorAll("[data-rf]").forEach(f => f.oninput = () => { rv.items.find(x => x.id === f.dataset.id)[f.dataset.rf] = f.value; });
+    document.querySelectorAll("[data-triage]").forEach(b => b.onclick = () => triage(b.dataset.triage === "keep"));
+    document.querySelectorAll("[data-step]").forEach(b => b.onclick = () => step(+b.dataset.step));
+    document.querySelectorAll("[data-hover]").forEach(el => { el.onmouseenter = () => { rv.hot = el.dataset.hover; document.querySelector(`mark[data-mark="${rv.hot}"]`)?.classList.add("hot"); el.classList.add("hot"); document.querySelector(`mark[data-mark="${rv.hot}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }); };
+      el.onmouseleave = () => { document.querySelector(`mark[data-mark="${el.dataset.hover}"]`)?.classList.remove("hot"); el.classList.remove("hot"); rv.hot = null; }; });
+    document.querySelectorAll("mark[data-mark]").forEach(m => m.onclick = () => document.querySelector(`[data-hover="${m.dataset.mark}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    $("#keepAll") && ($("#keepAll").onclick = () => { rv.items.forEach(i => i.keep = true); render(); });
+    const commit = async () => { rv.saving = true; render(); const kept = rv.items.filter(i => i.keep).map(i => ({ card_id: i.id, question: i.question, answer: i.answer }));
+      const n = await api.commitReview(rv.sourceId, kept); const deckId = db.sources.find(s => s.id === rv.sourceId).deck_id; ui.review = null; ui.tab = "cards"; go("deck", { deckId }); toast(`${n} cards added · ${rv.items.length - n} dropped`); };
+    $("#commit") && ($("#commit").onclick = commit);
+    document.querySelectorAll("[data-commit2]").forEach(b => b.onclick = commit);
+  }
+}
+
+seed();
+render();
+</script>
+<script data-pplx-inline-edit>
+(function () {
+  if (window === window.top) return;
+
+  const allowedParentOrigins = ["https://www.perplexity.ai","https://perplexity.ai","https://testing.perplexity.ai","https://staging.perplexity.ai","https://*.preview.i.perplexity.ai","http://perplexity.localhost","http://localhost:1420","http://127.0.0.1:1420","http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://127.0.0.1:5173"];
+  const MAX_FONT_BYTES = 500 * 1024;
+  const MAX_TOTAL_FONT_BYTES = 2 * 1024 * 1024;
+  const DEFAULT_LINE_HEIGHT = 16;
+  let scrollForwarding = false;
+  let scrollRaf = 0;
+  let trustedTopOrigin = null;
+
+  // Allow entries like "https://*.preview.i.perplexity.ai" — the wildcard
+  // matches a single DNS label (no dots), so "https://*.foo" cannot stretch
+  // across multiple labels.
+  function matchesAllowedOrigin(origin) {
+    if (!origin) return false;
+    for (const entry of allowedParentOrigins) {
+      if (!entry.includes("*")) {
+        if (entry === origin) return true;
+        continue;
+      }
+      const pattern = new RegExp(
+        "^" +
+          entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+") +
+          "$",
+      );
+      if (pattern.test(origin)) return true;
+    }
+    return false;
+  }
+
+  // Trust decision: when the sender is same-origin-visible (event.origin is a
+  // real origin like https://www.perplexity.ai) we trust event.origin directly.
+  // When event.origin is "null" (opaque broker srcdoc), we fall back to the
+  // broker's stamped `parentOrigin` to identify the top window. The fallback
+  // is claim-only — we rely on the browser's native `targetOrigin` enforcement
+  // on the response path (see postToTrustedTop) to ensure replies can't be
+  // delivered to anyone but the actual top window of that claimed origin.
+  function getTrustedParentOrigin(event) {
+    const forwardedParentOrigin =
+      typeof event.data.parentOrigin === "string" ? event.data.parentOrigin : null;
+    const parentOrigin = event.origin === "null" ? forwardedParentOrigin : event.origin;
+    return matchesAllowedOrigin(parentOrigin) ? parentOrigin : null;
+  }
+
+  // All responses go to window.top with targetOrigin = the allowlisted origin.
+  // An attacker that iframes us inside their own null-origin broker can claim
+  // any parentOrigin they like, but the browser will drop the reply whenever
+  // the real top's origin doesn't match — so the screenshot never leaves.
+  function postToTrustedTop(message) {
+    if (!trustedTopOrigin) return;
+    try {
+      window.top.postMessage(message, trustedTopOrigin);
+    } catch (_error) {}
+  }
+
+  const PICK_CAPABILITIES = ["pick"];
+  const PICK_CHAIN_LENGTH = 4;
+  const PICK_MAX_TEXT_CHARS = 120;
+  const PICK_MAX_HTML_CHARS = 300;
+
+  function truncate(value, maxChars) {
+    return value.length > maxChars ? value.slice(0, maxChars - 1) + "…" : value;
+  }
+
+  function isPickableElement(element) {
+    return (
+      element instanceof Element &&
+      element !== document.documentElement &&
+      element !== document.body
+    );
+  }
+
+  function resolvePickTarget(x, y) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const element = document.elementFromPoint(x, y);
+    return isPickableElement(element) ? element.closest("svg") || element : null;
+  }
+
+  function pickLabel(element) {
+    if (element.id) return element.localName + "#" + element.id;
+    return [element.localName].concat(Array.from(element.classList).slice(0, 2)).join(".");
+  }
+
+  // Only attributes that help find the element in source. data-* values and URL
+  // query strings or fragments can carry tokens.
+  const PICK_ATTRIBUTES = new Set([
+    "id",
+    "class",
+    "name",
+    "type",
+    "role",
+    "alt",
+    "aria-label",
+    "href",
+    "src",
+  ]);
+
+  function pickAttributeValue(attribute) {
+    return attribute.name === "href" || attribute.name === "src"
+      ? attribute.value.split(/[?#]/)[0]
+      : attribute.value;
+  }
+
+  function describePickElement(element) {
+    const chain = [];
+    for (
+      let current = element;
+      isPickableElement(current) && chain.length < PICK_CHAIN_LENGTH;
+      current = current.parentElement
+    ) {
+      chain.unshift(current);
+    }
+    const attributes = Array.from(element.attributes)
+      .filter((attribute) => PICK_ATTRIBUTES.has(attribute.name))
+      .map((attribute) => ` ${attribute.name}="${pickAttributeValue(attribute).replace(/"/g, "&quot;")}"`)
+      .join("");
+    const text = (element.innerText || element.textContent || "").replace(/\s+/g, " ").trim();
+    return {
+      chain: chain.map(pickLabel),
+      html: truncate(`<${element.localName}${attributes}>`, PICK_MAX_HTML_CHARS),
+      text: text ? truncate(text, PICK_MAX_TEXT_CHARS) : undefined,
+    };
+  }
+
+  // Hover asks once per frame, and innerText on a large section forces layout,
+  // so only the rect is re-read while the pointer stays on the same element.
+  // Clicks ask for fresh details since the page may have changed the element.
+  let lastPick = null;
+
+  function describePickTarget(element, fresh) {
+    if (fresh || lastPick?.element !== element) {
+      lastPick = { element, details: describePickElement(element) };
+    }
+    const rect = element.getBoundingClientRect();
+    return {
+      rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+      ...lastPick.details,
+    };
+  }
+
+  function inlineAll(original, clone) {
+    if (original.nodeType !== 1 || clone.nodeType !== 1) return;
+
+    try {
+      const computedStyle = getComputedStyle(original);
+      // cssText on a computed style is the serialized declaration in modern
+      // Chromium/Safari — a single read beats enumerating ~400 longhand
+      // properties. Firefox returns "" here, so we fall back on empty.
+      const serialized = computedStyle.cssText;
+      if (serialized) {
+        clone.style.cssText = serialized;
+      } else {
+        const parts = new Array(computedStyle.length);
+        for (let index = 0; index < computedStyle.length; index += 1) {
+          const property = computedStyle[index];
+          parts[index] = `${property}:${computedStyle.getPropertyValue(property)};`;
+        }
+        clone.style.cssText = parts.join("");
+      }
+    } catch (_error) {}
+
+    const originalChildren = original.children;
+    const clonedChildren = clone.children;
+    for (
+      let index = 0;
+      index < originalChildren.length && index < clonedChildren.length;
+      index += 1
+    ) {
+      inlineAll(originalChildren[index], clonedChildren[index]);
+    }
+  }
+
+  function extractFontUrl(srcValue) {
+    const matches = [
+      ...srcValue.matchAll(
+        /url\(["']?([^"')]+)["']?\)(?:\s*format\(["']?([^"')]+)["']?\))?/gi,
+      ),
+    ];
+    if (matches.length === 0) return null;
+    const woff2 = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff2"));
+    if (woff2) return woff2[1];
+    const woff = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff"));
+    if (woff) return woff[1];
+    return matches[0][1];
+  }
+
+  // Cache resolved font URL -> data URI across captures. Fonts on a page
+  // essentially never change, and a batch run emits multiple captures back to
+  // back — without this we'd refetch + re-base64 every time.
+  const fontDataUriCache = new Map();
+  const SRC_DECLARATION_RE = /src\s*:\s*[^;}]+/i;
+
+  async function fetchAsDataUri(url) {
+    if (fontDataUriCache.has(url)) return fontDataUriCache.get(url);
+    let dataUri = null;
+    try {
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.size <= MAX_FONT_BYTES) {
+          dataUri = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    } catch (_error) {
+      dataUri = null;
+    }
+    fontDataUriCache.set(url, dataUri);
+    return dataUri;
+  }
+
+  function collectFontFaceRuleTexts() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let cssRules;
+      try {
+        cssRules = sheet.cssRules;
+      } catch (_error) {
+        continue;
+      }
+      if (!cssRules) continue;
+      for (const rule of cssRules) {
+        const cssText = rule.cssText || "";
+        if (cssText.startsWith("@font-face")) rules.push(cssText);
+      }
+    }
+    return rules;
+  }
+
+  async function buildInlinedFontCss() {
+    const ruleTexts = collectFontFaceRuleTexts();
+    if (ruleTexts.length === 0) return null;
+
+    const resolved = ruleTexts.map((cssText) => {
+      if (!SRC_DECLARATION_RE.test(cssText)) return null;
+      const srcMatch = cssText.match(/src\s*:\s*([^;}]+)[;}]/i);
+      if (!srcMatch) return null;
+      const url = extractFontUrl(srcMatch[1]);
+      if (!url) return null;
+      try {
+        return { cssText, url: new URL(url, document.baseURI).href };
+      } catch (_error) {
+        return null;
+      }
+    });
+
+    const dataUris = await Promise.all(
+      resolved.map((entry) => (entry ? fetchAsDataUri(entry.url) : Promise.resolve(null))),
+    );
+
+    const inlined = [];
+    let totalBytes = 0;
+    for (let index = 0; index < resolved.length; index += 1) {
+      const entry = resolved[index];
+      const dataUri = dataUris[index];
+      if (!entry || !dataUri) continue;
+      const approxBytes = dataUri.length * 0.75;
+      if (totalBytes + approxBytes > MAX_TOTAL_FONT_BYTES) break;
+      totalBytes += approxBytes;
+      inlined.push(entry.cssText.replace(SRC_DECLARATION_RE, `src: url("${dataUri}")`));
+    }
+    return inlined.length > 0 ? inlined.join("\n") : null;
+  }
+
+  function stripExternal(clone) {
+    const images = clone.querySelectorAll("img");
+    for (let index = 0; index < images.length; index += 1) {
+      const src = images[index].getAttribute("src");
+      if (src && !src.startsWith("data:")) images[index].removeAttribute("src");
+    }
+
+    const elements = clone.querySelectorAll("*");
+    for (let index = 0; index < elements.length; index += 1) {
+      const style = elements[index].style.cssText;
+      if (style && style.includes("url(")) {
+        elements[index].style.cssText = style.replace(
+          /url\(["']?(?!data:)[^)"']*["']?\)/gi,
+          "none",
+        );
+      }
+    }
+  }
+
+  function emitScroll() {
+    scrollRaf = 0;
+    if (!scrollForwarding) return;
+    postToTrustedTop({
+      type: "INLINE_EDIT_SCROLL",
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+      capabilities: PICK_CAPABILITIES,
+    });
+  }
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!scrollForwarding || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(emitScroll);
+    },
+    { passive: true, capture: true },
+  );
+
+  async function handleCaptureRequest(event) {
+    const requestId = event.data.requestId;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    function postResult(dataUrl) {
+      postToTrustedTop({
+        type: "INLINE_EDIT_SCREENSHOT_RESULT",
+        requestId,
+        dataUrl,
+        scrollX,
+        scrollY,
+      });
+    }
+
+    try {
+      // Wait for any pending web fonts to resolve so both inline metrics and
+      // the @font-face inlining below see the same loaded faces.
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (_error) {}
+      }
+
+      const clone = document.documentElement.cloneNode(true);
+      inlineAll(document.documentElement, clone);
+
+      const removedNodes = clone.querySelectorAll("script,link[rel=\"stylesheet\"],style");
+      for (let index = 0; index < removedNodes.length; index += 1) {
+        removedNodes[index].remove();
+      }
+
+      stripExternal(clone);
+
+      // Re-embed web fonts as data-URI @font-face rules so the SVG rasterizer
+      // can resolve them — external font URLs aren't fetched during
+      // foreignObject rendering, which would otherwise force a fallback face
+      // and change text metrics.
+      const inlinedFontCss = await buildInlinedFontCss();
+      if (inlinedFontCss) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = inlinedFontCss;
+        const head = clone.querySelector("head");
+        if (head) head.appendChild(styleEl);
+        else clone.insertBefore(styleEl, clone.firstChild);
+      }
+
+      const html = new XMLSerializer().serializeToString(clone);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        '<foreignObject width="100%" height="100%">' +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden">` +
+        `<div style="position:relative;left:-${scrollX}px;top:-${scrollY}px">` +
+        html +
+        "</div></div></foreignObject></svg>";
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const image = new Image();
+      image.onload = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        postResult(canvas.toDataURL("image/png"));
+      };
+      image.onerror = function () {
+        postResult(null);
+      };
+      image.src = svgUrl;
+    } catch (_error) {
+      postResult(null);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    // Only accept messages from the direct parent frame. Blocks sibling /
+    // unrelated-window postMessage senders that could otherwise reach us.
+    if (event.source !== window.parent) return;
+
+    const trustedParentOrigin = getTrustedParentOrigin(event);
+    if (!trustedParentOrigin) return;
+    trustedTopOrigin = trustedParentOrigin;
+
+    if (event.data.type === "INLINE_EDIT_PICK") {
+      const element = resolvePickTarget(event.data.x, event.data.y);
+      postToTrustedTop({
+        type: "INLINE_EDIT_PICK_RESULT",
+        seq: event.data.seq,
+        target: element ? describePickTarget(element, event.data.fresh === true) : null,
+      });
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_START") {
+      scrollForwarding = true;
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_STOP") {
+      scrollForwarding = false;
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_BY") {
+      const { deltaX, deltaY, deltaMode } = event.data;
+      if (!scrollForwarding || !Number.isFinite(deltaX) || !Number.isFinite(deltaY)) return;
+      if (deltaMode !== 0 && deltaMode !== 1 && deltaMode !== 2) return;
+      const lineHeight =
+        parseFloat(getComputedStyle(document.documentElement).lineHeight) || DEFAULT_LINE_HEIGHT;
+      const scaleX = deltaMode === 1 ? lineHeight : deltaMode === 2 ? window.innerWidth : 1;
+      const scaleY = deltaMode === 1 ? lineHeight : deltaMode === 2 ? window.innerHeight : 1;
+      // The selection overlay receives the wheel event instead of this iframe.
+      // Instant scrolling preserves trackpad deltas even on smooth-scroll sites.
+      window.scrollBy({ left: deltaX * scaleX, top: deltaY * scaleY, behavior: "instant" });
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type !== "INLINE_EDIT_CAPTURE_REQUEST") return;
+
+    handleCaptureRequest(event);
+  });
+})();
+
+
+</script></body>
+</html>
