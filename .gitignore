@@ -1,1 +1,9 @@
-apps/api/app/__pycache__/
+__pycache__/
+.venv/
+.env
+.env.*
+!.env.example
+node_modules/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
