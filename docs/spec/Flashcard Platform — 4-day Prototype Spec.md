@@ -1,7 +1,9 @@
-# Spec — Flashcard & Knowledge Platform: 4-day prototype
+# Spec — Rekalled: 4-day build
 
 **Status:** ready-for-agent
 **Tracker:** local markdown (`.scratch/prototype/`)
+**Product name:** Rekalled (rekalled.app)
+**Revision 2 (2 Nov 2026):** Studying with FSRS is now in scope and is the primary job of the app. Checking AI drafts is no longer called "review"; "review" now means rating a Card while studying. There is one draft-check screen (the checklist). The build order is in `BUILD-GUIDE.md`.
 
 ## Problem Statement
 
@@ -11,9 +13,11 @@ Separately, I'm using this project to practise product design and production-gra
 
 ## Solution
 
-A web app where I create a **Deck**, paste text into it as a **Source**, and an LLM turns that Source into **draft Cards**. I review the drafts quickly: every draft is kept by default, and I can edit or untick any of them before saving. Saved Cards stay linked to the Source and to the exact passage they came from. I can browse, edit and delete Cards in a Deck. I sign in with a hosted identity provider, and my data is visible only to me.
+A web app whose home screen is **Study today**: the Cards that are due, one button to start, and a **Memory score** that shows how much I'm likely to remember right now. I study one Card at a time: I see the question, reveal the answer, and rate how well I remembered it (Again, Hard, Good or Easy). The FSRS scheduler, running in FastAPI, uses that rating to decide when I see the Card next. Every Card has its own Memory score, and each Deck's score is the average of its studied Cards.
 
-The 4-day prototype delivers the architecture plus the paste → generate → review → save flow. Studying with spaced repetition, URL/PDF import, Notes with semantic recall, the PWA, and deployment are designed for but not built.
+To get Cards, I create a **Deck**, paste text into it as a **Source**, and an LLM turns that Source into **Draft Cards**. I check the drafts quickly: every draft is kept by default, and I can edit or untick any of them before saving. Saved Cards stay linked to the Source and to the exact passage they came from. I can browse, edit and delete Cards in a Deck. I sign in with a hosted identity provider, and my data is visible only to me.
+
+The 4-day build delivers the architecture, the paste → generate → check → save flow, and studying with FSRS scheduling and Memory scores. URL/PDF import, Notes with semantic recall, the PWA, and deployment are designed for but not built.
 
 ## Domain Glossary
 
@@ -22,9 +26,16 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
 - **Source**: a piece of material added to a Deck that Cards are generated from. In the prototype, only pasted text. Each Source belongs to exactly one Deck.
 - **Card**: a question and answer pair. Belongs to exactly one Deck, and optionally to one Source.
 - **Source excerpt**: the passage of a Source that a Card was generated from.
-- **Draft Card**: a Card the LLM generated that has not been reviewed yet.
-- **Active Card**: a Card that was kept at review.
+- **Draft Card**: a Card the LLM generated that hasn't been checked yet.
+- **Draft check**: the step where the User keeps, edits or drops Draft Cards before saving them. Not called "review".
+- **Active Card**: a Card that was kept at the draft check. Only Active Cards are studied.
 - **Generation**: one LLM run that turns a Source into Draft Cards.
+- **New Card**: an Active Card that has never been studied (`last_review_at` is null).
+- **Due Card**: a studied Card whose `due_at` is now or in the past.
+- **Study session**: one pass through the study queue: Due Cards first (oldest due first), then up to 10 New Cards.
+- **Review**: one rating of one Card during a Study session. Ratings are Again (1), Hard (2), Good (3) and Easy (4). Each Review is stored in `review_logs`.
+- **Memory score**: FSRS retrievability, the predicted chance that the User would recall a Card right now, shown as a percentage. A Deck's Memory score is the mean over its studied Cards. New Cards have no score and are counted separately.
+- **Scheduler**: the FSRS algorithm (the `fsrs` Python package) that turns a Review into the Card's next due date.
 - **Note** (roadmap): free text written by the User and retrieved later by meaning.
 
 ## User Stories
@@ -44,12 +55,12 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
 13. As a User, I want the LLM to decide how many Cards to make, within a sensible maximum, so that short and long texts both get suitable coverage.
 14. As a User, I want to see a clear loading state while Cards are generated, so that I know the app is working.
 15. As a User, I want generated Cards saved as drafts straight away, so that refreshing the page doesn't lose LLM output.
-16. As a User, I want every Draft Card kept by default, so that review is fast when the output is good.
+16. As a User, I want every Draft Card kept by default, so that the draft check is fast when the output is good.
 17. As a User, I want to untick a Draft Card to drop it, so that I can reject poor Cards with one click.
 18. As a User, I want to edit a Draft Card's question and answer before saving, so that I can fix small errors.
-19. As a User, I want to see the Source excerpt beside each Draft Card, so that I can check it against the original text.
-20. As a User, I want to save the whole review in one action, so that kept Cards become Active and dropped Cards are deleted together.
-21. As a User, I want to come back later to a Source whose drafts I haven't reviewed, so that I can finish reviewing.
+19. As a User, I want to see the Source excerpt under each Draft Card, so that I can check it against the original text.
+20. As a User, I want to save the whole draft check in one action, so that kept Cards become Active and dropped Cards are deleted together.
+21. As a User, I want to come back later to a Source whose drafts I haven't checked, so that I can finish checking them.
 22. As a User, I want a clear error if Generation fails, and the option to retry, so that a temporary model problem doesn't lose my Source.
 23. As a User, I want to see all Active Cards in a Deck, so that I know what I've built.
 24. As a User, I want to edit an Active Card, so that I can improve it later.
@@ -60,14 +71,29 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
 29. As a developer, I want a dev auth bypass that only works in development, so that I can run the app locally without Logto.
 30. As a developer, I want the app to refuse to start if the bypass is turned on outside development, so that it can never ship to production by mistake.
 31. As a developer, I want a typed TypeScript API client generated from FastAPI's OpenAPI spec, so that the frontend and backend contracts can't silently drift.
-32. As a developer, I want CI to fail when the generated client is out of date, so that contract drift is caught in review.
+32. As a developer, I want CI to fail when the generated client is out of date, so that contract drift is caught before merging.
 33. As a developer, I want the LLM behind a single `CardGenerator` interface with a fake version, so that tests are fast and free and don't depend on the network.
 34. As a developer, I want the app runnable locally with one command, so that setup is trivial for me and for reviewers.
 35. As a developer, I want CI to run linting, type checks, unit tests, API tests and one E2E test on every pull request, so that `main` always works.
 36. As a developer, I want the identity provider behind a frontend wrapper and a backend auth module, so that moving from Logto Cloud to self-hosted Logto, or another OIDC provider, is a config change plus one adapter.
-37. As a developer, I want FSRS scheduling columns already on the Card table, so that spaced-repetition study can be added without reshaping data.
+37. As a developer, I want FSRS state stored on the Card row and every Review appended to `review_logs`, so that scheduling is cheap to query and the history can later be used to tune FSRS parameters.
 38. As a developer, I want a `user_entitlements` table and scope checks, so that usage limits and billing have a ready place to plug in.
 39. As an interviewer reading the repo, I want ADRs explaining the key decisions, so that I can follow the reasoning behind the architecture.
+40. As a User, I want Study today to be the first screen after signing in, so that studying is the obvious thing to do.
+41. As a User, I want to see how many Cards are due and how many are new, with an estimate of the time it will take, so that I can decide to start.
+42. As a User, I want to study all my Decks at once or one Deck, so that I can focus when I need to.
+43. As a User, I want to see a question, try to answer it in my head, then reveal the answer, so that I practise recall rather than recognition.
+44. As a User, I want to see the Source excerpt with the answer, so that I can check my understanding against the original text.
+45. As a User, I want to rate each Card Again, Hard, Good or Easy using buttons or the keys 1 to 4, so that studying is fast.
+46. As a User, I want each rating button to show when I'd see the Card next, so that I understand what the rating does.
+47. As a User, I want a Card I rate Again to come back later in the same session, so that I relearn it while it's fresh.
+48. As a User, I want each answer saved as soon as I give it, and a repeated submission to have no effect, so that leaving early or a flaky network never loses or doubles progress.
+49. As a User, I want a Memory score for every Card and every Deck, so that I can see what I'm likely to forget.
+50. As a User, I want each Deck's Cards split into strong (90% or more), fading, weak (under 75%) and new, so that I can see the shape of what I know.
+51. As a User, I want an overall Memory score, the number of Reviews today, and a 7-day forecast of Due Cards on Study today, so that I can see my progress and plan ahead.
+52. As a User, I want a summary at the end of a session showing my Memory score before and after, so that studying feels rewarding.
+53. As a User, I want to be told when nothing is due and when the next Card will be, so that I don't study too early.
+54. As a User, I want newly saved Cards to be offered for study straight away, so that I start learning while the material is fresh.
 
 ## Implementation Decisions
 
@@ -102,7 +128,7 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
   - The Logto application type is **Single page app**.
   - A default `user` role is set in the Logto Console (Roles → General), so no Management API call is needed ([Logto RBAC](https://docs.logto.io/authorization/role-based-access-control)).
   - The SDK always requests `offline_access` and refreshes tokens itself ([Logto React quick start](https://docs.logto.io/quick-starts/react)). No extra refresh configuration is needed.
-  - Scopes are `decks:read`, `decks:write` and `cards:generate`. `admin:users` and the admin role are deferred.
+  - Scopes are `decks:read`, `decks:write` and `cards:generate`. Studying uses `decks:read` for reading and `decks:write` for Reviews. `admin:users` and the admin role are deferred.
   - `users.email` and `users.display_name` stay nullable and are not filled in the prototype. `/v1/me` returns them as null, and the profile page reads the display name from the SDK's ID token claims. Before writing the user-creation code, decode one real access token to confirm which claims Logto includes.
   - The dev bypass uses a fixed subject `dev|local`, goes through the same just-in-time user creation, gets every scope, and can be overridden with an `X-Dev-User` header for manual multi-user testing. It only works when `ENV=development`.
   - E2E tests use a `FakeAuthAdapter` behind the `src/auth/` wrapper (`VITE_AUTH_MODE=fake`). The backend validates its tokens against a static test JWKS served in CI. The real Logto flow is covered by a manual smoke checklist in the README.
@@ -117,11 +143,21 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
 - **cards:**
   - Identity and ownership: `id`, `owner_id`, `deck_id`, `source_id` (nullable, so hand-written Cards are possible later).
   - Content: `card_type` (`basic` now), `question`, `answer`, `source_excerpt` (nullable).
-  - Review state: `status` (`draft` or `active`).
-  - FSRS columns, all nullable and empty while a Card is a draft: `due_at`, `stability`, `difficulty`, `fsrs_state`, `reps`, `lapses`, `last_review_at`.
+  - Lifecycle: `status` (`draft` or `active`).
+  - FSRS columns, mirroring the `fsrs` package's `Card` (all null while a Card is a draft):
+    - `fsrs_state` (smallint: 1 Learning, 2 Review, 3 Relearning) and `fsrs_step` (smallint, nullable).
+    - `stability` and `difficulty` (floats, null until the first Review).
+    - `due_at` (timestamptz) and `last_review_at` (timestamptz, null for New Cards).
+    - `reps` and `lapses` (ints, our own counters for display; not part of FSRS).
+  - When a draft becomes Active: `fsrs_state = 1`, `fsrs_step = 0`, `due_at = now()`, the others null, and the counters at 0.
   - Timestamps.
-  - An index on `(owner_id, due_at)`, for the future "next Cards due" query.
-- `review_logs` is designed but not created in the prototype. It will be an append-only table with a client-generated UUID primary key, so repeated review submissions are idempotent.
+  - An index on `(owner_id, due_at)` for the study queue.
+- **review_logs** (append-only):
+  - `id`: a UUID generated by the client. It is the primary key, which makes `POST /v1/reviews` idempotent.
+  - `owner_id`, `card_id` (cascade on Card delete), `rating` (1–4), `reviewed_at`.
+  - A snapshot of the Card's FSRS state after the Review (`fsrs_state`, `stability`, `difficulty`, `due_at`), for debugging and future parameter tuning.
+  - An index on `(owner_id, reviewed_at)` for "Reviews today".
+- The first migration also runs `CREATE EXTENSION IF NOT EXISTS vector`, so Notes can be added later without touching the database image.
 
 ### Modules
 
@@ -135,13 +171,23 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
   - Interface: `create_source_and_generate(user, deck_id, text, title) -> Source with Draft Cards`.
   - Enforces the text limit (about 20k characters, set in config) and the card limit (about 20, set in config).
   - Saves the Source before calling the generator, so a failed Generation keeps the Source and can be retried.
-- **Review service**:
-  - Interface: `commit_review(user, source_id, kept: [{card_id, question, answer}]) -> list[Card]`.
-  - In one transaction: kept drafts get their edits and become `active`, and the other drafts for that Source are deleted.
+- **Draft commit service**:
+  - Interface: `commit_drafts(user, source_id, kept: [{card_id, question, answer}]) -> list[Card]`.
+  - In one transaction: kept drafts get their edits, become `active` and get their initial FSRS state; the other drafts for that Source are deleted.
   - Running it again is harmless.
+- **Scheduler** (deep module, the only code that imports `fsrs`):
+  - Interface: `review(card_state, rating, now) -> card_state`, `preview(card_state, now) -> {rating: next_due_at}`, `retrievability(card_state, now) -> float | None`.
+  - Hides: mapping our columns to and from `fsrs.Card`, the UTC-only rule of py-fsrs, and the scheduler settings (desired retention 0.9, fuzzing on in the app and off in tests).
+  - Pure functions with no database access, so worked-example unit tests are easy.
+- **Study service**:
+  - `get_queue(user, deck_id | None, new_limit=10) -> list[StudyCard]`: Due Cards ordered by `due_at`, then New Cards in creation order. Each StudyCard includes the next-due preview for all four ratings, so the client never runs FSRS.
+  - `submit_review(user, review_id, card_id, rating) -> Card`: in one transaction, inserts into `review_logs` with `ON CONFLICT (id) DO NOTHING`. If the row already existed, it returns the Card unchanged. Otherwise it locks the Card row (`SELECT … FOR UPDATE`), applies the Scheduler and saves the new state.
+  - `summary(user) -> {score, due, new, studied, reviews_today, forecast_7d}` and `deck_stats(user, deck_id) -> {score, due, new, total, bands}`. Scores are computed when they are read, never stored, because retrievability changes with time. Python over the rows is fine at prototype scale; a SQL version can come later.
+  - "Today" is the UTC day in the prototype.
 - **Deck and Card services**: CRUD, always filtered by `owner_id`.
 - **Auth module** (`auth/`): config, JWT validation, `get_auth_info`, `get_current_user`, `require_scope`. This is the only code that knows about Logto.
 - **Frontend `src/auth/`**: `useAuth()`, `<RequireAuth>`, and two adapters, `LogtoAuthAdapter` and `FakeAuthAdapter`. No other frontend code imports `@logto/react`.
+- **Frontend study screens**: Study today, the Study session and the Deck page, as in the prototype. Keyboard: Space reveals the answer, 1–4 rate it. Each rating is sent with a `crypto.randomUUID()` `review_id`.
 - **Frontend API layer**: the generated client plus a fetch wrapper that attaches the Bearer token, retries once on a 401 after forcing a token refresh, and then redirects to sign-in. Private data is loaded with TanStack Query, client-side only. Protected routes don't render on the server.
 
 ### API contract (prototype)
@@ -149,13 +195,16 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
 | Method | Path | Scope | Notes |
 | --- | --- | --- | --- |
 | GET | `/v1/me` | any | id, email, display_name, scopes |
-| GET / POST | `/v1/decks` | read / write | list with Card counts; create |
+| GET / POST | `/v1/decks` | read / write | list with Card counts and `stats` (score, due, new, total, bands); create |
 | GET / PATCH / DELETE | `/v1/decks/{id}` | read / write | 404 if not the owner |
 | POST | `/v1/decks/{id}/sources` | `cards:generate` | body `{title?, text}`; creates the Source and runs Generation; returns the Source plus Draft Cards; 413/422 if the text is too long |
 | GET | `/v1/sources/{id}` | read | Source plus its Draft and Active Cards |
 | POST | `/v1/sources/{id}/generate` | `cards:generate` | retry Generation for a Source with no drafts |
-| POST | `/v1/sources/{id}/review` | write | commits the review in one request |
-| GET | `/v1/decks/{id}/cards` | read | Active Cards |
+| POST | `/v1/sources/{id}/drafts/commit` | write | commits the draft check in one request |
+| GET | `/v1/decks/{id}/cards` | read | Active Cards, each with `memory_score`, `due_at`, `reps` and `lapses` |
+| GET | `/v1/study/queue?deck_id=` | read | the study queue, each Card with `next_due` previews for ratings 1–4 |
+| POST | `/v1/reviews` | write | body `{review_id, card_id, rating}`; idempotent on `review_id`; returns the updated Card with its new `memory_score` |
+| GET | `/v1/study/summary` | read | overall score, due, new, studied, Reviews today, 7-day forecast |
 | PATCH / DELETE | `/v1/cards/{id}` | write | edit or delete a Card |
 
 ### CI (GitHub Actions)
@@ -181,11 +230,15 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
      - Deck CRUD.
      - Generation creating a Source plus drafts, including the text-limit error.
      - Generation failure keeping the Source.
-     - Committing a review (kept → active, dropped → deleted, edits applied, repeat commit harmless).
+     - Committing drafts (kept → active with initial FSRS state, dropped → deleted, edits applied, repeat commit harmless).
+     - The study queue: Due before New, the New-Card limit, a Deck filter, and other Users' Cards never appearing.
+     - Reviews: the Card's state changes, a repeated `review_id` changes nothing, a rating outside 1–4 gives 422, and another User's Card gives 404.
+     - Deck stats and the summary, with times controlled through an injectable clock.
      - Card edit and delete.
-  2. **CardGenerator output parsing:** unit tests showing that badly formed or over-limit model output becomes a domain error, and valid output becomes `CardDraft`s.
-  3. **Frontend auth wrapper and API layer:** Vitest plus React Testing Library. Covers attaching the token, retrying once on 401 then redirecting, and `<RequireAuth>` redirecting when signed out.
-  4. **End to end:** one Playwright journey: sign in (fake adapter) → create a Deck → paste text → review (edit one draft, drop one) → save → see the Active Cards → sign out.
+  2. **Scheduler:** unit tests with fuzzing off and fixed UTC times. They check that a New Card rated Good moves through the short learning steps and then graduates to Review, Again on a Review Card moves it to Relearning, Easy gives a later due date than Good, and retrievability is 1.0 straight after a Review and falls over time. Expected values come from py-fsrs runs written down once as fixtures.
+  3. **CardGenerator output parsing:** unit tests showing that badly formed or over-limit model output becomes a domain error, and valid output becomes `CardDraft`s.
+  4. **Frontend auth wrapper and API layer:** Vitest plus React Testing Library. Covers attaching the token, retrying once on 401 then redirecting, and `<RequireAuth>` redirecting when signed out.
+  5. **End to end:** one Playwright journey: sign in (fake adapter) → create a Deck → paste text → check drafts (edit one, drop one) → save → study the new Cards (reveal, rate) → see the Deck's Memory score → sign out.
 - **Prior art:** none yet (new repository). These tests become the patterns later tests follow.
 - **Model quality:** a manual script runs the real `AiSdkCardGenerator` against sample texts. It isn't run in CI.
 
@@ -193,7 +246,8 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
 
 - URL and PDF import (planned: `trafilatura` for URLs, `pypdf` for PDFs, behind `extract(input) -> SourceText`).
 - Background Generation jobs and SSE progress updates.
-- Studying with FSRS, and the `review_logs` table.
+- Tuning FSRS parameters per User (the optimizer), per-User time zones and daily limits, undoing a Review, and card burying or suspending.
+- Draft-check variants B (split view) and C (one at a time) from the prototype.
 - Notes, embeddings, hybrid search and the RAG `/ask` feature.
 - Card types other than basic.
 - PWA, offline sync, web push and mobile apps.
@@ -207,7 +261,9 @@ The 4-day prototype delivers the architecture plus the paste → generate → re
 
 - The Python `ai` package is in beta. Pin its version, and keep it entirely inside `AiSdkCardGenerator` so that switching to OpenRouter or another SDK is a change in one file.
 - Be careful with the similarly named community package `ai-sdk-python`, which is a different project.
-- ADRs to write (ticket 07):
+- FSRS uses the official [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) package (`fsrs` on PyPI), pinned. It works only with UTC datetimes, and `review_card` returns the new Card and a ReviewLog. It is the only backend dependency added beyond the earlier list.
+- ADRs to write (final ticket):
   1. Delegate identity to an OIDC provider (Logto), with FastAPI validating JWTs. Alternatives considered: Better Auth, Clerk, FastAPI Users. Includes the migration plan from Cloud to self-hosted OSS.
   2. FastAPI is the only owner of data and logic, and Start is a thin layer.
   3. REST is the default, with GraphQL only when its triggers are met.
+  4. FSRS scheduling runs only on the server, using py-fsrs, with idempotent Reviews keyed by a client UUID. Alternatives considered: SM-2, and running ts-fsrs in the browser.
