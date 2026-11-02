@@ -4,6 +4,7 @@
 **Tracker:** local markdown (`.scratch/prototype/`)
 **Product name:** Rekalled (rekalled.app)
 **Revision 2 (2 Nov 2026):** Studying with FSRS is now in scope and is the primary job of the app. Checking AI drafts is no longer called "review"; "review" now means rating a Card while studying. There is one draft-check screen (the checklist). The build order is in `BUILD-GUIDE.md`.
+**Revision 3 (2 Nov 2026):** The LLM client is now [Pydantic AI](https://pydantic.dev/docs/ai/overview/) (`pydantic-ai-slim[openai]`), with every model call routed through [Pydantic AI Gateway](https://pydantic.dev/docs/ai/overview/gateway/). This replaces the Vercel `ai` Python package and Vercel AI Gateway. The gateway shows cost, limits and traces for each call in Logfire. Frontend AI integrations aren't used.
 
 ## Problem Statement
 
@@ -164,7 +165,8 @@ The 4-day build delivers the architecture, the paste → generate → check → 
 - **CardGenerator** (deep module, at the external seam):
   - Interface: `generate(text, *, max_cards) -> list[CardDraft]`, where each `CardDraft` has `question`, `answer` and `source_excerpt`.
   - Two adapters:
-    - **AiSdkCardGenerator** uses the Vercel `ai` Python package ([vercel-labs/ai-python](https://github.com/vercel-labs/ai-python), public beta, version pinned) with Pydantic structured output, routed through Vercel AI Gateway. The model ID comes from config.
+    - **LlmCardGenerator** uses a [Pydantic AI](https://pydantic.dev/docs/ai/overview/) `Agent` with `output_type` set to a Pydantic model, so the output is validated, and invalid output is sent back to the model for one retry (`retries={"output": 1}`). Calls go through [Pydantic AI Gateway](https://pydantic.dev/docs/ai/overview/gateway/). The model is a Pydantic AI model string from config (`AI_MODEL`, default `gateway/openai:gpt-5.4-mini`).
+    - **`app/llm.py`** is the only module that knows about gateway credentials. It builds models with `infer_model` and a provider factory that maps the `gateway/` prefix to `gateway_provider(upstream, api_key=...)`. It passes the key from `Settings` (`PYDANTIC_AI_GATEWAY_API_KEY`) explicitly, because pydantic-settings reads `.env` into `Settings`, not into `os.environ`. The key's region (`pylf_v1_<region>_...`) picks the gateway URL.
     - **FakeCardGenerator** is deterministic, for tests and E2E.
   - Hides: prompt construction, splitting text into chunks, enforcing the card limit, retries, and turning invalid model output into a domain error.
 - **Generation service**:
@@ -240,7 +242,8 @@ The 4-day build delivers the architecture, the paste → generate → check → 
   4. **Frontend auth wrapper and API layer:** Vitest plus React Testing Library. Covers attaching the token, retrying once on 401 then redirecting, and `<RequireAuth>` redirecting when signed out.
   5. **End to end:** one Playwright journey: sign in (fake adapter) → create a Deck → paste text → check drafts (edit one, drop one) → save → study the new Cards (reveal, rate) → see the Deck's Memory score → sign out.
 - **Prior art:** none yet (new repository). These tests become the patterns later tests follow.
-- **Model quality:** a manual script runs the real `AiSdkCardGenerator` against sample texts. It isn't run in CI.
+- **LLM adapter tests:** `FunctionModel` from Pydantic AI's [testing tools](https://pydantic.dev/docs/ai/guides/testing/) scripts the model's replies, and `models.ALLOW_MODEL_REQUESTS = False` in `conftest.py` stops any test from reaching a real model.
+- **Model quality:** a manual script runs the real `LlmCardGenerator` against sample texts. It isn't run in CI.
 
 ## Out of Scope
 
@@ -255,12 +258,13 @@ The 4-day build delivers the architecture, the paste → generate → check → 
 - Billing and entitlement logic.
 - GraphQL.
 - Deployment and hosting.
-- Using the AI SDK in the browser (`useObject` / `useChat`).
+- Calling models from the browser. Pydantic AI's frontend integrations (for example the Vercel AI SDK UI adapter) aren't used; the web app only talks to `/v1`.
 
 ## Further Notes
 
-- The Python `ai` package is in beta. Pin its version, and keep it entirely inside `AiSdkCardGenerator` so that switching to OpenRouter or another SDK is a change in one file.
-- Be careful with the similarly named community package `ai-sdk-python`, which is a different project.
+- Pydantic AI is `pydantic-ai-slim[openai]>=2.64.0`. The `openai` extra brings in the OpenAI SDK, which the gateway uses for OpenAI models; this is an approved exception to the rule of adding no dependencies beyond `@logto/react` and `PyJWT[crypto]`. Pydantic AI needs Python 3.11 or later; the project pins 3.13.
+- Pydantic AI imports stay in `app/llm.py` and the adapters (`LlmCardGenerator`, and later `LlmEmbedder` and `LlmAnswerer`). Routes and services only see the Protocols. Switching provider is a model-string change (`gateway/anthropic:...`, or `openai:...` without the gateway).
+- Retry naming: some docs show `output_retries=`. In 2.64 the Agent takes `retries={"output": N}`. Check against the installed version.
 - FSRS uses the official [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) package (`fsrs` on PyPI), pinned. It works only with UTC datetimes, and `review_card` returns the new Card and a ReviewLog. It is the only backend dependency added beyond the earlier list.
 - ADRs to write (final ticket):
   1. Delegate identity to an OIDC provider (Logto), with FastAPI validating JWTs. Alternatives considered: Better Auth, Clerk, FastAPI Users. Includes the migration plan from Cloud to self-hosted OSS.
