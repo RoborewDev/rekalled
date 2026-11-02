@@ -2,9 +2,10 @@ import os
 
 os.environ["ENV"] = "test"
 # Hard override: a dev DATABASE_URL exported by `just`/dotenv must never leak into tests.
-os.environ["DATABASE_URL"] = os.environ.get(
+TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5433/rekalled_test"
 )
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from collections.abc import AsyncIterator  # noqa: E402
 
@@ -26,8 +27,13 @@ def migrated_database() -> None:
 
 
 @pytest.fixture(scope="session")
-async def engine() -> AsyncIterator[AsyncEngine]:
-    engine = create_async_engine(os.environ["DATABASE_URL"])
+def test_database_url() -> str:
+    return TEST_DATABASE_URL
+
+
+@pytest.fixture(scope="session")
+async def engine(test_database_url: str) -> AsyncIterator[AsyncEngine]:
+    engine = create_async_engine(test_database_url)
     yield engine
     await engine.dispose()
 
