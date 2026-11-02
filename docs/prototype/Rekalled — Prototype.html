@@ -1,15 +1,16 @@
 <!doctype html>
 <!--
-  PROTOTYPE — throwaway front-end for the Flashcard & Knowledge Platform spec.
-  Question: what should the paste → generate → review → save flow look like?
-  Three variants of the Review screen, switchable via ?variant=A|B|C and the floating bar.
-  All state is in memory. The "API" and CardGenerator are stubs.
+  PROTOTYPE — throwaway front-end for the Rekalled spec.
+  Questions: does Study read as the primary job, and do deck/card memory scores make
+  spaced repetition visible? Also: three variants of the draft-check screen (?variant=A|B|C).
+  All state is in memory. The "API", CardGenerator and FSRS scheduler are client-side stubs;
+  in the real app FSRS runs in FastAPI.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Ledger — Flashcards prototype</title>
+<title>Rekalled — prototype</title>
 <link href="https://api.fontshare.com/v2/css?f[]=erode@500,600,700&f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
 <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 <style>
@@ -77,7 +78,7 @@ svg.lucide{width:1.1em;height:1.1em;stroke-width:1.75;flex-shrink:0}
 .nav button{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);font-size:var(--text-sm);color:var(--color-muted);text-align:left;width:100%}
 .nav button:hover{background:var(--color-offset);color:var(--color-text)}
 .nav button[aria-current=page]{background:var(--color-primary-hl);color:var(--color-primary);font-weight:500}
-.nav .count{margin-left:auto;font-size:var(--text-xs);color:var(--color-faint);font-variant-numeric:tabular-nums}
+.nav .count{white-space:nowrap;margin-left:auto;font-size:var(--text-xs);color:var(--color-faint);font-variant-numeric:tabular-nums}
 .nav .dot{width:7px;height:7px;border-radius:50%;background:var(--color-rule);margin-left:auto}
 .side-foot{margin-top:auto;border-top:1px solid var(--color-divider);padding-top:var(--space-3)}
 .me{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);width:100%;text-align:left}
@@ -229,6 +230,103 @@ kbd{font-family:var(--font-body);font-size:var(--text-xs);border:1px solid var(-
 @keyframes deal{from{transform:translateY(10px) rotate(-1deg);opacity:0}}
 .vc-done{text-align:center;max-width:44ch}
 
+/* Brand */
+.wordmark .k{color:var(--color-rule)}
+
+/* Memory score ring */
+.ring{position:relative;display:inline-grid;place-items:center;flex-shrink:0}
+.ring svg{transform:rotate(-90deg);display:block}
+.ring circle{transition:stroke-dasharray .6s var(--ease)}
+.ring .v{position:absolute;inset:0;display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums;font-size:var(--text-xs)}
+.ring.lg .v{display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:var(--text-xl);font-weight:600}
+.ring.lg .v small{font-size:.5em;margin-left:1px}
+
+/* Today */
+.today{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:var(--space-5);margin-bottom:var(--space-10)}
+.hero{position:relative;background:var(--color-primary);color:var(--color-inverse);border-radius:var(--radius-lg);padding:var(--space-8) var(--space-8) var(--space-8) var(--space-12);overflow:hidden;display:flex;flex-direction:column;gap:var(--space-3);min-height:260px;box-shadow:var(--shadow-md)}
+.hero::before{content:"";position:absolute;left:var(--space-6);top:0;bottom:0;width:1px;background:#e2776d;opacity:.8}
+.hero .eyebrow{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.1em;color:rgb(250 248 243 / .7)}
+.hero .big{font-family:var(--font-display);font-size:clamp(3.25rem,2rem + 4vw,5rem);line-height:.95;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.hero .big span{font-size:.36em;font-weight:500;letter-spacing:0;margin-left:var(--space-2)}
+.hero p{color:rgb(250 248 243 / .8);font-size:var(--text-sm);max-width:44ch}
+.hero .go{margin-top:auto;display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap}
+.btn-light{background:var(--color-inverse);color:var(--color-primary);padding:var(--space-3) var(--space-5);font-weight:600}
+.btn-light:hover{background:#fff}
+.btn-light kbd{background:transparent}
+.hero .ghost-light{color:rgb(250 248 243 / .85)}
+.hero .ghost-light:hover{background:rgb(255 255 255 / .1);color:#fff}
+.panel{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-5) var(--space-6)}
+.panel h2{font-size:var(--text-sm);font-weight:600}
+.panel .muted{font-size:var(--text-xs);color:var(--color-muted)}
+.score-row{display:flex;gap:var(--space-5);align-items:center}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3);margin-top:var(--space-5);padding-top:var(--space-4);border-top:1px solid var(--color-divider)}
+.stat b{display:block;font-size:var(--text-lg);font-variant-numeric:tabular-nums;line-height:1.2;font-weight:600}
+.stat span{font-size:var(--text-xs);color:var(--color-muted)}
+.forecast{display:flex;align-items:flex-end;gap:6px;height:84px;margin-top:var(--space-3)}
+.forecast div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%;font-size:10px;color:var(--color-muted);font-variant-numeric:tabular-nums}
+.forecast i{display:block;width:100%;background:var(--color-primary-hl);border-radius:3px 3px 0 0;min-height:3px}
+.forecast .now i{background:var(--color-primary)}
+.forecast .now{color:var(--color-text);font-weight:600}
+.section-h{display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4)}
+.section-h h2{font-family:var(--font-display);font-size:var(--text-lg)}
+
+/* Deck tiles (study-first) */
+.dt-top{display:flex;justify-content:space-between;gap:var(--space-3);align-items:flex-start}
+.dt-badges{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2)}
+.dt-foot{margin-top:auto;padding-top:var(--space-4);display:flex;align-items:center;gap:var(--space-3)}
+.dt-foot .meta{margin-top:0}
+.dt-foot .btn{margin-left:auto;padding:var(--space-1) var(--space-3)}
+.deck-tile{cursor:pointer}
+
+/* Memory breakdown */
+.mem{display:grid;gap:var(--space-2)}
+.mem-bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--color-offset-2);gap:2px}
+.mem-bar i{display:block;height:100%}
+.legend{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--text-xs);color:var(--color-muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
+.legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.deck-score{display:flex;gap:var(--space-6);align-items:center;margin-bottom:var(--space-6);flex-wrap:wrap}
+.deck-score .mem{flex:1;min-width:240px}
+
+/* Card strength */
+.card-row.with-str{grid-template-columns:1fr 1fr 150px auto}
+.str{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-xs);color:var(--color-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.str .bar{width:48px;height:6px;border-radius:3px;background:var(--color-offset-2);overflow:hidden;flex-shrink:0}
+.str .bar i{display:block;height:100%;border-radius:3px}
+.str b{color:var(--color-text);font-weight:600}
+.str .due{color:var(--color-rule);font-weight:600}
+.str-help{font-size:var(--text-xs);color:var(--color-faint);margin-top:2px}
+
+/* Study session */
+.study{max-width:680px;margin:0 auto}
+.study-top{display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-6);font-size:var(--text-sm);color:var(--color-muted);font-variant-numeric:tabular-nums}
+.pbar{flex:1;height:6px;background:var(--color-offset-2);border-radius:3px;overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--color-primary);border-radius:3px;transition:width .35s var(--ease)}
+.flash{position:relative;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);padding:var(--space-8) var(--space-8) var(--space-6) var(--space-12);min-height:340px;display:flex;flex-direction:column;gap:var(--space-4);animation:deal .3s var(--ease)}
+.flash::before{content:"";position:absolute;left:var(--space-8);top:0;bottom:0;width:1px;background:var(--color-rule);opacity:.5}
+.flash-meta{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;font-size:var(--text-xs);color:var(--color-muted)}
+.flash .q{font-family:var(--font-display);font-size:var(--text-xl);font-weight:600;line-height:1.2;letter-spacing:-.01em}
+.flash .rule{border:0;border-top:1px dashed var(--color-border);margin:var(--space-2) 0}
+.flash .a{font-size:var(--text-lg);color:var(--color-text);line-height:1.45}
+.flash .excerpt{margin-top:auto}
+.flash .hidden-a{margin-top:auto;font-size:var(--text-sm);color:var(--color-faint)}
+.reveal{width:100%;justify-content:center;padding:var(--space-4);margin-top:var(--space-6);font-size:var(--text-base)}
+.rates{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-top:var(--space-6)}
+.rates button{border:1px solid var(--color-border);background:var(--color-surface-2);border-radius:var(--radius-md);padding:var(--space-3) var(--space-2);display:flex;flex-direction:column;align-items:center;gap:2px;font-weight:600;font-size:var(--text-sm);transition:all .15s}
+.rates button:hover{transform:translateY(-1px);box-shadow:var(--shadow-sm)}
+.rates small{font-size:var(--text-xs);color:var(--color-muted);font-weight:500;font-variant-numeric:tabular-nums}
+.rates kbd{margin-top:2px}
+.rates .r1{color:var(--color-rule)}.rates .r1:hover{background:var(--color-rule-hl);border-color:var(--color-rule)}
+.rates .r2{color:var(--color-warning)}.rates .r2:hover{background:var(--color-warning-hl);border-color:var(--color-warning)}
+.rates .r3{color:var(--color-primary);border-color:var(--color-primary)}.rates .r3:hover{background:var(--color-primary-hl)}
+.rates .r4{color:var(--color-success)}.rates .r4:hover{background:var(--color-success-hl);border-color:var(--color-success)}
+.study-hint{text-align:center;font-size:var(--text-xs);color:var(--color-muted);margin-top:var(--space-5)}
+.summary{text-align:center;padding:var(--space-10) var(--space-6);background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg)}
+.summary h1{margin:var(--space-4) 0 var(--space-2)}
+.summary .delta{display:flex;justify-content:center;align-items:center;gap:var(--space-4);margin:var(--space-6) 0}
+.summary .stats{max-width:420px;margin:var(--space-6) auto}
+.up{color:var(--color-success);font-weight:600}.down{color:var(--color-rule);font-weight:600}
+
 /* Toast */
 .toasts{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:var(--space-2);z-index:60;width:max-content;max-width:calc(100vw - 2rem)}
 .toast{background:var(--color-text);color:var(--color-inverse);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);font-size:var(--text-sm);box-shadow:var(--shadow-lg);display:flex;gap:var(--space-3);align-items:center;animation:fade .2s}
@@ -255,7 +353,14 @@ kbd{font-family:var(--font-body);font-size:var(--text-xs);border:1px solid var(-
   .side.open{display:flex;position:fixed;inset:0 auto 0 0;width:280px;z-index:45;box-shadow:var(--shadow-lg)}
   .mobile-top{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-divider);background:var(--color-surface);position:sticky;top:0;z-index:20}
   .mobile-top .wordmark{font-size:var(--text-lg)}
-  .card-row{grid-template-columns:1fr;gap:var(--space-3)}
+  .card-row,.card-row.with-str{grid-template-columns:1fr;gap:var(--space-3)}
+  .today{grid-template-columns:1fr}
+  .hero{padding:var(--space-6) var(--space-5) var(--space-6) var(--space-10);min-height:0}
+  .hero::before{left:var(--space-5)}
+  .flash{padding:var(--space-6) var(--space-5) var(--space-5) var(--space-10);min-height:280px}
+  .flash::before{left:var(--space-6)}
+  .rates kbd{display:none}
+  .study{padding-bottom:var(--space-12)}
   .va-qa{grid-template-columns:1fr;gap:var(--space-3)}
   .vb{grid-template-columns:1fr}
   .vb-source{position:relative;top:0;max-height:260px}
@@ -282,26 +387,96 @@ kbd{font-family:var(--font-body);font-size:var(--text-xs);border:1px solid var(-
    STUB API — mirrors the /v1 contract in the spec. In-memory only.
    ============================================================ */
 const uid = () => Math.random().toString(36).slice(2, 10);
-const MAX_CHARS = 20000, MAX_CARDS = 20;
+const uuid = () => (window.crypto?.randomUUID ? crypto.randomUUID() : uid() + uid());
+const MAX_CHARS = 20000, MAX_CARDS = 20, NEW_PER_DAY = 10;
+const BRAND = 'Re<span class="k">k</span>alled';
+
+/* ============================================================
+   FSRS (stub of the server-side scheduler). FSRS-4.5 default weights,
+   simplified: no same-day learning steps beyond a 1m/10m retry.
+   Target retention 90% → the interval equals stability in days.
+   ============================================================ */
+const W = [0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461, 2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755];
+const DAY = 864e5, FACTOR = 19 / 81, DECAY = -0.5;
+const clock = { offset: 0 };
+const now = () => Date.now() + clock.offset;
+const clampD = x => Math.min(10, Math.max(1, x));
+const fsrs = {
+  /* Retrievability: probability you'd recall the card right now. This is the card's score. */
+  R(c, t = now()) { if (!c.stability || !c.last_review_at) return null; const days = Math.max(0, (t - c.last_review_at) / DAY); return Math.pow(1 + FACTOR * days / c.stability, DECAY); },
+  next(c, g, t = now()) {
+    let S, D;
+    if (!c.stability) { S = W[g - 1]; D = clampD(W[4] - (g - 3) * W[5]); }
+    else {
+      const r = this.R(c, t);
+      S = g === 1
+        ? W[11] * Math.pow(c.difficulty, -W[12]) * (Math.pow(c.stability + 1, W[13]) - 1) * Math.exp(W[14] * (1 - r))
+        : c.stability * (Math.exp(W[8]) * (11 - c.difficulty) * Math.pow(c.stability, -W[9]) * (Math.exp(W[10] * (1 - r)) - 1) * (g === 2 ? W[15] : 1) * (g === 4 ? W[16] : 1) + 1);
+      D = clampD(W[7] * W[4] + (1 - W[7]) * (c.difficulty - W[6] * (g - 3)));
+    }
+    let state, due;
+    if (g === 1) { state = (!c.fsrs_state || c.fsrs_state === "new" || c.fsrs_state === "learning") ? "learning" : "relearning"; due = t + (state === "learning" ? 60e3 : 10 * 60e3); }
+    else { state = "review"; due = t + Math.min(365, Math.max(1, Math.round(S))) * DAY; }
+    return { stability: S, difficulty: D, fsrs_state: state, due_at: due, last_review_at: t, reps: (c.reps || 0) + 1, lapses: (c.lapses || 0) + (g === 1 && c.fsrs_state === "review" ? 1 : 0) };
+  },
+};
+const fmtIval = ms => { const m = Math.max(1, ms / 6e4); if (m < 60) return Math.round(m) + "m"; const h = m / 60; if (h < 24) return Math.round(h) + "h"; const d = h / 24; if (d < 30) return Math.round(d) + "d"; if (d < 365) return Math.round(d / 30) + "mo"; return (d / 365).toFixed(1) + "y"; };
+const band = r => r == null ? "new" : r >= 0.9 ? "strong" : r >= 0.75 ? "fading" : "weak";
+const BAND_COLOR = { strong: "var(--color-success)", fading: "var(--color-primary)", weak: "var(--color-rule)", new: "var(--color-faint)" };
+const scoreColor = sc => sc == null ? BAND_COLOR.new : BAND_COLOR[band(sc / 100)];
+
+/* Stats that the real API would return on GET /v1/decks and GET /v1/study/summary */
+function stats(deckId) {
+  const t = now();
+  const cs = db.cards.filter(c => c.status === "active" && (!deckId || c.deck_id === deckId));
+  const studied = cs.filter(c => c.stability);
+  const rs = studied.map(c => fsrs.R(c, t));
+  const score = rs.length ? Math.round(100 * rs.reduce((a, b) => a + b, 0) / rs.length) : null;
+  const due = studied.filter(c => c.due_at <= t).length;
+  const fresh = cs.length - studied.length;
+  const bands = { strong: 0, fading: 0, weak: 0, new: fresh };
+  rs.forEach(r => bands[band(r)]++);
+  return { total: cs.length, studied: studied.length, score, due, fresh, newToday: Math.min(fresh, NEW_PER_DAY), bands };
+}
+function studyQueue(deckId) {
+  const t = now();
+  const cs = db.cards.filter(c => c.status === "active" && (!deckId || c.deck_id === deckId));
+  const due = cs.filter(c => c.stability && c.due_at <= t).sort((a, b) => a.due_at - b.due_at);
+  const fresh = cs.filter(c => !c.stability).slice(0, NEW_PER_DAY);
+  return [...due, ...fresh].map(c => c.id);
+}
+function nextDueIn(deckId) { const t = now(); const ds = db.cards.filter(c => c.status === "active" && c.stability && c.due_at > t && (!deckId || c.deck_id === deckId)).map(c => c.due_at); return ds.length ? Math.min(...ds) - t : null; }
 
 const SAMPLE = `TanStack Query is a library for fetching, caching and updating server state in web applications. A query key is an array that uniquely identifies a piece of cached data. Stale time is the duration for which cached data is considered fresh and will not be refetched. Garbage collection time is how long inactive query data stays in memory before it is removed. A mutation is an operation that creates, updates or deletes data on the server. Optimistic updates change the cache before the server responds, then roll back if the request fails. Invalidation marks queries as stale so they refetch the next time they are used.`;
+
+const PG_TEXT = `PostgreSQL is an open-source relational database known for reliability and extensibility. An extension is a package that adds types, functions or operators to Postgres. An embedding is a list of numbers that represents the meaning of a piece of text. Cosine distance is a measure of how different two vectors are by angle. An HNSW index is a graph-based index that makes approximate nearest-neighbour search fast. Hybrid search is a technique that combines keyword ranking with vector similarity. A tsvector is a sorted list of normalised words used for full-text search.`;
 
 const SEED_TEXT = `The CAP theorem states that a distributed data store can provide at most two of three guarantees: consistency, availability and partition tolerance. Consistency means every read receives the most recent write or an error. Availability means every request receives a non-error response. A network partition is a break in communication between nodes. Eventual consistency is a model where replicas converge to the same value if no new updates are made. Raft is a consensus algorithm designed to be easier to understand than Paxos.`;
 
 const db = {
   me: { id: "6a1f0c2e-9b3d-4e1a-8f55-2c7d1b0e4a91", email: null, display_name: null, scopes: ["decks:read", "decks:write", "cards:generate"] },
   idName: "Robin Andrew",
-  decks: [], sources: [], cards: [],
+  decks: [], sources: [], cards: [], logs: [],
 };
 
+const FRESH = { due_at: null, stability: null, difficulty: null, fsrs_state: "new", reps: 0, lapses: 0, last_review_at: null };
+/* history: [stability days, difficulty, last reviewed N days ago, reps, lapses] */
+const hist = ([S, D, ago, reps, lapses]) => { const last = now() - ago * DAY; return { stability: S, difficulty: D, fsrs_state: "review", last_review_at: last, due_at: last + Math.max(1, Math.round(S)) * DAY, reps, lapses }; };
 function seed() {
-  db.decks = []; db.sources = []; db.cards = [];
-  const d1 = { id: uid(), name: "Distributed systems", created_at: Date.now() - 864e5 * 6 };
+  clock.offset = 0;
+  db.decks = []; db.sources = []; db.cards = []; db.logs = [];
+  const d1 = { id: uid(), name: "Distributed systems", created_at: Date.now() - 864e5 * 12 };
+  const d3 = { id: uid(), name: "Postgres & pgvector", created_at: Date.now() - 864e5 * 9 };
   const d2 = { id: uid(), name: "Interview — React & TanStack", created_at: Date.now() - 864e5 * 2 };
-  db.decks.push(d1, d2);
-  const s1 = { id: uid(), deck_id: d1.id, kind: "text", title: "DDIA ch. 9 notes", content: SEED_TEXT, created_at: Date.now() - 864e5 * 5 };
+  db.decks.push(d1, d3, d2);
+  const s1 = { id: uid(), deck_id: d1.id, kind: "text", title: "DDIA ch. 9 notes", content: SEED_TEXT, created_at: Date.now() - 864e5 * 11 };
   db.sources.push(s1);
-  fakeGenerate(SEED_TEXT).forEach(c => db.cards.push({ ...c, id: uid(), deck_id: d1.id, source_id: s1.id, status: "active", card_type: "basic" }));
+  const h1 = [[2.4, 6.2, 7, 3, 1], [9.5, 4.4, 3, 4, 0], [0.9, 7.6, 5, 3, 2], [22, 3.1, 6, 5, 0], [4.2, 5.4, 9, 3, 0], [1.3, 6.8, 4, 2, 1]];
+  fakeGenerate(SEED_TEXT).forEach((c, n) => db.cards.push({ ...c, id: uid(), deck_id: d1.id, source_id: s1.id, status: "active", card_type: "basic", ...(h1[n] ? hist(h1[n]) : FRESH) }));
+  const s3 = { id: uid(), deck_id: d3.id, kind: "text", title: "pgvector reading notes", content: PG_TEXT, created_at: Date.now() - 864e5 * 9 };
+  db.sources.push(s3);
+  const h3 = [[31, 2.8, 5, 5, 0], [18, 3.6, 4, 4, 0], [12.5, 4.1, 4, 4, 0], [26, 3.0, 6, 5, 0], [7.6, 5.2, 9, 3, 1], [40, 2.4, 3, 6, 0]];
+  fakeGenerate(PG_TEXT).forEach((c, n) => db.cards.push({ ...c, id: uid(), deck_id: d3.id, source_id: s3.id, status: "active", card_type: "basic", ...(h3[n] ? hist(h3[n]) : FRESH) }));
   const s2 = { id: uid(), deck_id: d2.id, kind: "text", title: "TanStack Query docs", content: SAMPLE, created_at: Date.now() - 36e5 * 3 };
   db.sources.push(s2);
   fakeGenerate(SAMPLE).forEach(c => db.cards.push({ ...c, id: uid(), deck_id: d2.id, source_id: s2.id, status: "draft", card_type: "basic" }));
@@ -334,7 +509,17 @@ function fakeGenerate(text) {
 
 const api = {
   delay: (ms = 350) => new Promise(r => setTimeout(r, ms)),
-  async listDecks() { await this.delay(250); return db.decks.map(d => ({ ...d, card_count: db.cards.filter(c => c.deck_id === d.id && c.status === "active").length, draft_count: db.cards.filter(c => c.deck_id === d.id && c.status === "draft").length })); },
+  async listDecks() { await this.delay(250); return db.decks.map(d => ({ ...d, card_count: db.cards.filter(c => c.deck_id === d.id && c.status === "active").length, draft_count: db.cards.filter(c => c.deck_id === d.id && c.status === "draft").length, ...{ stats: stats(d.id) } })); },
+  /* POST /v1/reviews — idempotent on the client-generated review_id; FSRS runs server-side */
+  async submitReview({ review_id, card_id, rating }) {
+    await this.delay(80);
+    const c = db.cards.find(x => x.id === card_id);
+    if (db.logs.some(l => l.id === review_id)) return c;
+    const r_before = fsrs.R(c);
+    Object.assign(c, fsrs.next(c, rating));
+    db.logs.push({ id: review_id, card_id, rating, reviewed_at: now(), r_before });
+    return c;
+  },
   async createDeck(name) { await this.delay(200); const d = { id: uid(), name, created_at: Date.now() }; db.decks.unshift(d); return d; },
   async renameDeck(id, name) { await this.delay(150); db.decks.find(d => d.id === id).name = name; },
   async deleteDeck(id) { await this.delay(150); db.decks = db.decks.filter(d => d.id !== id); db.sources = db.sources.filter(s => s.deck_id !== id); db.cards = db.cards.filter(c => c.deck_id !== id); },
@@ -357,7 +542,7 @@ const api = {
     await this.delay(450);
     const keptIds = new Set(kept.map(k => k.card_id));
     db.cards = db.cards.filter(c => !(c.source_id === source_id && c.status === "draft" && !keptIds.has(c.id)));
-    kept.forEach(k => { const c = db.cards.find(x => x.id === k.card_id); if (c) Object.assign(c, { question: k.question, answer: k.answer, status: "active" }); });
+    kept.forEach(k => { const c = db.cards.find(x => x.id === k.card_id); if (c) Object.assign(c, { question: k.question, answer: k.answer, status: "active", ...FRESH }); });
     return kept.length;
   },
   async updateCard(id, patch) { await this.delay(150); Object.assign(db.cards.find(c => c.id === id), patch); },
@@ -371,12 +556,12 @@ const api = {
 const VARIANTS = { A: "Checklist", B: "Split view with source", C: "One card at a time" };
 const params = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
 const ui = {
-  authed: false, route: { name: "decks" }, variant: VARIANTS[params.get("variant")] ? params.get("variant") : "A",
+  authed: false, route: { name: "today" }, study: null, variant: VARIANTS[params.get("variant")] ? params.get("variant") : "A",
   simulateError: false, sideOpen: false, profileOpen: false, sheet: null, tab: "cards",
   editing: null, review: null, generating: null, genError: null, decksCache: [],
 };
 function setVariantInUrl(v) { try { const u = new URL(location.href); u.searchParams.set("variant", v); history.replaceState(null, "", u); } catch {} }
-function go(name, p = {}) { ui.route = { name, ...p }; ui.sideOpen = false; ui.profileOpen = false; ui.editing = null; if (name !== "review") ui.review = null; render(); window.scrollTo(0, 0); }
+function go(name, p = {}) { ui.route = { name, ...p }; ui.sideOpen = false; ui.profileOpen = false; ui.editing = null; if (name !== "review") ui.review = null; if (name !== "study") ui.study = null; render(); window.scrollTo(0, 0); }
 
 /* helpers */
 const $ = s => document.querySelector(s);
@@ -399,7 +584,7 @@ async function render() {
   if (!ui.authed) { app.innerHTML = viewSignIn(); bindSignIn(); finish(); return; }
   ui.decksCache = await api.listDecks();
   app.innerHTML = `
-    <div class="mobile-top"><button class="btn-icon" id="openSide" aria-label="Open menu">${ic("menu")}</button><span class="wordmark">Ledger</span></div>
+    <div class="mobile-top"><button class="btn-icon" id="openSide" aria-label="Open menu">${ic("menu")}</button><span class="wordmark">${BRAND}</span></div>
     <div class="shell">${viewSide()}<main id="main">${await viewMain()}</main></div>
     ${ui.sheet ? viewSheet() : ""}
     ${ui.profileOpen ? viewProfile() : ""}
@@ -410,8 +595,8 @@ function finish() { if (window.lucide) lucide.createIcons(); }
 
 function viewSignIn() {
   return `<div class="signin"><div class="signin-card"><div class="signin-inner">
-    <div class="wordmark">Ledger</div>
-    <p>Turn what you read into flash cards. Keep every card tied to where it came from.</p>
+    <div class="wordmark">${BRAND}</div>
+    <p>Turn what you read into flash cards, then study them just before you'd forget. Every card stays tied to where it came from.</p>
     <button class="btn btn-primary" id="signin">${ic("log-in")} Continue with Logto</button>
     <small>Hosted sign-in · OIDC + PKCE · no passwords stored here</small>
   </div></div></div>${viewProto()}`;
@@ -429,15 +614,15 @@ function bindSignIn() {
 function viewSide() {
   const r = ui.route;
   return `<aside class="side ${ui.sideOpen ? "open" : ""}">
-    <div class="wordmark">Ledger</div>
+    <div class="wordmark">${BRAND}</div>
     <nav class="nav" aria-label="Main">
-      <button data-go="decks" ${r.name === "decks" ? 'aria-current="page"' : ""}>${ic("layers")} All decks</button>
-      <button disabled title="Roadmap" style="opacity:.55;cursor:not-allowed">${ic("graduation-cap")} Study <span class="badge" style="margin-left:auto">soon</span></button>
+      <button data-go="today" ${r.name === "today" || r.name === "study" && !r.deckId ? 'aria-current="page"' : ""}>${ic("graduation-cap")} Study today ${(() => { const t = stats(); const n = t.due + t.newToday; return n ? `<span class="badge badge-primary" style="margin-left:auto">${n}</span>` : ""; })()}</button>
+      <button data-go="decks" ${r.name === "decks" ? 'aria-current="page"' : ""}>${ic("layers")} Manage decks</button>
       <button disabled title="Roadmap" style="opacity:.55;cursor:not-allowed">${ic("notebook-pen")} Notes <span class="badge" style="margin-left:auto">soon</span></button>
     </nav>
     <div class="side-label"><span>Decks</span><button class="btn-icon" id="sideNew" aria-label="New deck">${ic("plus")}</button></div>
     <nav class="nav" aria-label="Decks">
-      ${ui.decksCache.map(d => `<button data-deck="${d.id}" ${(r.deckId === d.id) ? 'aria-current="page"' : ""}>${ic("book-open")}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>${d.draft_count ? '<span class="dot" title="Drafts waiting"></span>' : `<span class="count">${d.card_count}</span>`}</button>`).join("")}
+      ${ui.decksCache.map(d => `<button data-deck="${d.id}" ${(r.deckId === d.id) ? 'aria-current="page"' : ""}>${ic("book-open")}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>${d.draft_count ? '<span class="dot" title="Drafts waiting"></span>' : d.stats.due ? `<span class="count" style="color:var(--color-primary);font-weight:600" title="Due now">${d.stats.due} due</span>` : `<span class="count" title="Memory score">${d.stats.score ?? "–"}${d.stats.score != null ? "%" : ""}</span>`}</button>`).join("")}
     </nav>
     <div class="side-foot"><button class="me" id="me"><div class="avatar">${initials(db.idName)}</div><span>${esc(db.idName)}<small>Profile & sign out</small></span></button></div>
   </aside>`;
@@ -456,6 +641,8 @@ function viewProfile() {
 
 async function viewMain() {
   const r = ui.route;
+  if (r.name === "today") return viewToday();
+  if (r.name === "study") return viewStudy();
   if (r.name === "decks") return viewDecks();
   if (r.name === "deck") return viewDeck(r.deckId);
   if (r.name === "generating") return viewGenerating();
@@ -463,17 +650,63 @@ async function viewMain() {
   return "";
 }
 
+function ring(score, size = 44, stroke = 4, cls = "") {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r, v = score ?? 0;
+  return `<span class="ring ${cls}" style="width:${size}px;height:${size}px" role="img" aria-label="Memory score ${score ?? "not yet studied"}${score != null ? "%" : ""}">
+    <svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--color-offset-2)" stroke-width="${stroke}"/>
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${scoreColor(score)}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${(c * v / 100).toFixed(1)} ${c.toFixed(1)}"/></svg>
+    <span class="v">${score == null ? "–" : cls.includes("lg") ? `${score}<small>%</small>` : score}</span></span>`;
+}
+function deckTile(d) {
+  const st = d.stats, n = st.due + st.newToday;
+  return `<div class="deck-tile" data-deck="${d.id}" role="link" tabindex="0" aria-label="Open ${esc(d.name)}">
+    <div class="dt-top"><h3>${esc(d.name)}</h3>${ring(st.score)}</div>
+    <div class="dt-badges">
+      ${st.due ? `<span class="badge badge-primary">${ic("clock")} ${st.due} due</span>` : ""}
+      ${st.newToday ? `<span class="badge">${st.newToday} new</span>` : ""}
+      ${!n && st.total ? `<span class="badge badge-ok">${ic("check")} Caught up</span>` : ""}
+      ${d.draft_count ? `<span class="badge badge-rule">${ic("file-pen")} ${d.draft_count} drafts to check</span>` : ""}
+    </div>
+    <div class="dt-foot"><div class="meta"><span>${d.card_count} cards</span><span>${(n => `${n} source${n === 1 ? "" : "s"}`)(db.sources.filter(s => s.deck_id === d.id).length)}</span></div>
+      ${n ? `<button class="btn btn-primary" data-study="${d.id}">${ic("play")} Study ${n}</button>` : ""}</div>
+  </div>`;
+}
+function emptyDecks() { return `<div class="empty"><div class="ic">${ic("layers")}</div><h3>Start your first deck</h3><p>A deck groups cards about one topic. Create one, then paste in text to generate cards.</p><button class="btn btn-primary" id="newDeck2">${ic("plus")} New deck</button></div>`; }
 function viewDecks() {
   const ds = ui.decksCache;
-  const head = `<div class="page-head"><div><h1>Your decks</h1><p class="sub">${ds.length} decks · ${ds.reduce((a, d) => a + d.card_count, 0)} cards</p></div>
+  const head = `<div class="page-head"><div><h1>Manage decks</h1><p class="sub">${ds.length} decks · ${ds.reduce((a, d) => a + d.card_count, 0)} cards</p></div>
     <div class="actions"><button class="btn btn-primary" id="newDeck">${ic("plus")} New deck</button></div></div>`;
-  if (!ds.length) return head + `<div class="empty"><div class="ic">${ic("layers")}</div><h3>Start your first deck</h3><p>A deck groups cards about one topic. Create one, then paste in text to generate cards.</p><button class="btn btn-primary" id="newDeck2">${ic("plus")} New deck</button></div>`;
-  return head + `<div class="decks">${ds.map(d => `
-    <button class="deck-tile" data-deck="${d.id}">
-      <h3>${esc(d.name)}</h3>
-      ${d.draft_count ? `<span class="badge badge-rule" style="margin-top:var(--space-2);align-self:flex-start">${ic("file-pen")} ${d.draft_count} drafts to review</span>` : ""}
-      <div class="meta"><span>${d.card_count} cards</span><span>${db.sources.filter(s => s.deck_id === d.id).length} sources</span><span>${ago(d.created_at)}</span></div>
-    </button>`).join("")}</div>`;
+  return head + (ds.length ? `<div class="decks">${ds.map(deckTile).join("")}</div>` : emptyDecks());
+}
+function memBreakdown(st) {
+  const tot = st.total || 1, seg = k => st.bands[k] ? `<i style="width:${100 * st.bands[k] / tot}%;background:${BAND_COLOR[k]}" title="${k}: ${st.bands[k]}"></i>` : "";
+  return `<div class="mem"><div class="mem-bar">${seg("strong")}${seg("fading")}${seg("weak")}${seg("new")}</div>
+    <div class="legend"><span><i style="background:${BAND_COLOR.strong}"></i>${st.bands.strong} strong ≥90%</span><span><i style="background:${BAND_COLOR.fading}"></i>${st.bands.fading} fading</span><span><i style="background:${BAND_COLOR.weak}"></i>${st.bands.weak} weak &lt;75%</span><span><i style="background:${BAND_COLOR.new}"></i>${st.bands.new} new</span></div></div>`;
+}
+function viewToday() {
+  const t = stats(), n = t.due + t.newToday, ds = ui.decksCache;
+  const today0 = new Date(now()); today0.setHours(0, 0, 0, 0);
+  const reviewsToday = db.logs.filter(l => l.reviewed_at >= today0.getTime()).length;
+  const days = [...Array(7)].map((_, i) => { const end = today0.getTime() + (i + 1) * DAY; const start = i === 0 ? -Infinity : end - DAY; return db.cards.filter(c => c.status === "active" && c.stability && c.due_at > start && c.due_at <= end).length; });
+  const max = Math.max(1, ...days), dn = ["Today", ...[1, 2, 3, 4, 5, 6].map(i => new Date(today0.getTime() + i * DAY).toLocaleDateString("en-GB", { weekday: "short" }))];
+  const nd = nextDueIn();
+  const hero = n ? `<section class="hero" aria-label="Study queue">
+      <div class="eyebrow">Today's study</div>
+      <div class="big">${n}<span>card${n === 1 ? "" : "s"}</span></div>
+      <p>${t.due} due for review${t.newToday ? ` · ${t.newToday} new` : ""} · about ${Math.max(1, Math.round(n * 10 / 60))} min. Rekalled schedules each card just before you're likely to forget it.</p>
+      <div class="go"><button class="btn btn-light" data-study="all">${ic("play")} Start studying <kbd>Enter</kbd></button></div></section>`
+    : `<section class="hero" aria-label="Study queue"><div class="eyebrow">Today's study</div><div class="big" style="font-size:clamp(2.25rem,1.6rem + 2.5vw,3.25rem)">All caught up</div>
+      <p>${nd ? `Next card is due in ${fmtIval(nd)}.` : "Add some text to a deck to make your first cards."} Studying early won't help much, because spacing is what makes memories last.</p>
+      <div class="go"><button class="btn btn-light" data-go="decks">${ic("plus")} Add cards</button></div></section>`;
+  const panel = `<section class="panel" aria-label="Memory score">
+      <div class="score-row">${ring(t.score, 104, 8, "lg")}<div><h2>Memory score</h2><p class="muted" style="margin-top:var(--space-1)">The average chance you'd recall a studied card right now. It falls as time passes and rises when you study.</p></div></div>
+      <div class="stats"><div class="stat"><b>${t.studied}</b><span>cards learning</span></div><div class="stat"><b>${reviewsToday}</b><span>reviews today</span></div><div class="stat"><b>90%</b><span>target recall</span></div></div>
+      <div style="margin-top:var(--space-4)"><h2>Due this week</h2><div class="forecast">${days.map((v, i) => `<div class="${i === 0 ? "now" : ""}"><span>${v}</span><i style="height:${(v / max) * 52}px"></i><span>${dn[i]}</span></div>`).join("")}</div></div>
+    </section>`;
+  return `<div class="page-head"><div><h1>Study today</h1><p class="sub">${new Date(now()).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p></div></div>
+    <div class="today">${hero}${panel}</div>
+    <div class="section-h"><h2>Decks</h2><button class="btn btn-ghost" id="newDeck">${ic("plus")} New deck</button></div>
+    ${ds.length ? `<div class="decks">${ds.map(deckTile).join("")}</div>` : emptyDecks()}`;
 }
 
 function viewDeck(id) {
@@ -481,28 +714,30 @@ function viewDeck(id) {
   const active = db.cards.filter(c => c.deck_id === id && c.status === "active");
   const sources = db.sources.filter(s => s.deck_id === id);
   const pending = sources.filter(s => db.cards.some(c => c.source_id === s.id && c.status === "draft"));
+  const st = stats(id), nStudy = st.due + st.newToday;
   const nameField = ui.editing === "deckname"
     ? `<input class="field" id="deckName" value="${esc(d.name)}" style="font-family:var(--font-display);font-size:var(--text-lg);max-width:420px" />`
     : `<h1>${esc(d.name)}</h1>`;
   let body = "";
   if (ui.tab === "cards") {
     body = !active.length
-      ? `<div class="empty"><div class="ic">${ic("square-stack")}</div><h3>No cards yet</h3><p>Paste an article, docs page or your own notes. Ledger drafts the cards; you decide what to keep.</p><button class="btn btn-primary" data-add>${ic("clipboard-paste")} Add text</button></div>`
-      : `<div class="cards">${active.map(c => viewCardRow(c)).join("")}</div>`;
+      ? `<div class="empty"><div class="ic">${ic("square-stack")}</div><h3>No cards yet</h3><p>Paste an article, docs page or your own notes. Rekalled drafts the cards; you decide what to keep.</p><button class="btn btn-primary" data-add>${ic("clipboard-paste")} Add text</button></div>`
+      : `<div class="cards">${[...active].sort((a, b) => (fsrs.R(a) ?? 2) - (fsrs.R(b) ?? 2)).map(c => viewCardRow(c)).join("")}</div>`;
   } else {
     body = !sources.length
       ? `<div class="empty"><div class="ic">${ic("file-text")}</div><h3>No sources yet</h3><p>Every card links back to the source it came from.</p><button class="btn btn-primary" data-add>${ic("clipboard-paste")} Add text</button></div>`
       : `<div class="cards">${sources.map(s => { const dr = db.cards.filter(c => c.source_id === s.id && c.status === "draft").length; const ac = db.cards.filter(c => c.source_id === s.id && c.status === "active").length;
           return `<div class="source-row">${ic("file-text")}<div><div class="t">${esc(s.title)}</div><div class="m">Pasted text · ${s.content.length.toLocaleString()} chars · ${ac} cards · ${ago(s.created_at)}</div></div>
-          ${dr ? `<button class="btn btn-outline" data-review="${s.id}">${ic("file-pen")} Review ${dr} drafts</button>` : ac ? `<span class="badge badge-ok" style="margin-left:auto">${ic("check")} Reviewed</span>` : `<button class="btn btn-outline" data-retry="${s.id}">${ic("refresh-cw")} Generate</button>`}</div>`; }).join("")}</div>`;
+          ${dr ? `<button class="btn btn-outline" data-review="${s.id}">${ic("file-pen")} Check ${dr} drafts</button>` : ac ? `<span class="badge badge-ok" style="margin-left:auto">${ic("check")} Checked</span>` : `<button class="btn btn-outline" data-retry="${s.id}">${ic("refresh-cw")} Generate</button>`}</div>`; }).join("")}</div>`;
   }
   return `<div class="page-head"><div><div class="crumb"><button data-go="decks">Decks</button>${ic("chevron-right")}<span>${esc(d.name)}</span></div>${nameField}
-      <p class="sub">${active.length} cards · ${sources.length} sources</p></div>
+      <p class="sub">${active.length} cards · ${st.due} due · ${st.fresh} new · ${sources.length} source${sources.length === 1 ? "" : "s"}</p></div>
     <div class="actions">
       ${ui.editing === "deckname" ? `<button class="btn btn-primary" id="saveName">Save</button><button class="btn btn-ghost" id="cancelName">Cancel</button>` :
-      `<button class="btn btn-ghost" id="rename">${ic("pencil")} Rename</button><button class="btn btn-ghost btn-danger" id="delDeck">${ic("trash-2")} Delete</button><button class="btn btn-primary" data-add>${ic("clipboard-paste")} Add text</button>`}
+      `<button class="btn-icon" id="rename" aria-label="Rename deck" title="Rename">${ic("pencil")}</button><button class="btn-icon btn-danger" id="delDeck" aria-label="Delete deck" title="Delete">${ic("trash-2")}</button><button class="btn btn-outline" data-add>${ic("clipboard-paste")} Add text</button>${nStudy ? `<button class="btn btn-primary" data-study="${id}">${ic("play")} Study ${nStudy}</button>` : ""}`}
     </div></div>
-    ${pending.map(s => `<div class="banner">${ic("file-pen")}<span><b>${db.cards.filter(c => c.source_id === s.id && c.status === "draft").length} draft cards</b> from “${esc(s.title)}” are waiting for review.</span><button class="btn btn-outline" data-review="${s.id}">Review now</button></div>`).join("")}
+    ${pending.map(s => `<div class="banner">${ic("file-pen")}<span><b>${db.cards.filter(c => c.source_id === s.id && c.status === "draft").length} draft cards</b> from “${esc(s.title)}” are waiting to be checked.</span><button class="btn btn-outline" data-review="${s.id}">Check now</button></div>`).join("")}
+    ${st.total ? `<div class="deck-score panel">${ring(st.score, 72, 6, "lg")}<div style="min-width:120px"><h2>Deck memory score</h2><p class="muted">Average of ${st.studied} studied cards${nStudy ? "" : ` · next due in ${fmtIval(nextDueIn(id) ?? DAY)}`}</p></div>${memBreakdown(st)}</div>` : ""}
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="cards" aria-selected="${ui.tab === "cards"}">${ic("square-stack")} Cards <span class="badge">${active.length}</span></button>
       <button role="tab" data-tab="sources" aria-selected="${ui.tab === "sources"}">${ic("file-text")} Sources <span class="badge">${sources.length}</span></button>
@@ -515,10 +750,74 @@ function viewCardRow(c) {
     <div><div class="lbl">Question</div><textarea class="field" rows="2" data-f="question">${esc(c.question)}</textarea></div>
     <div><div class="lbl">Answer</div><textarea class="field" rows="3" data-f="answer">${esc(c.answer)}</textarea></div>
     <div class="row-actions"><button class="btn btn-primary" data-save="${c.id}">Save</button><button class="btn btn-ghost" data-cancel>Cancel</button></div></div>`;
-  return `<div class="card-row" data-row="${c.id}">
+  return `<div class="card-row with-str" data-row="${c.id}">
     <div><div class="lbl">Question</div><div class="q">${esc(c.question)}</div>${s ? `<div class="src">${ic("link-2")} ${esc(s.title)}</div>` : ""}</div>
     <div><div class="lbl">Answer</div><div class="a">${esc(c.answer)}</div></div>
+    <div><div class="lbl">Recall now</div>${strength(c)}</div>
     <div class="row-actions"><button class="btn-icon" data-edit="${c.id}" aria-label="Edit card">${ic("pencil")}</button><button class="btn-icon" data-del="${c.id}" aria-label="Delete card">${ic("trash-2")}</button></div></div>`;
+}
+
+function strength(c) {
+  if (!c.stability) return `<span class="str"><span class="badge">New</span></span><div class="str-help">Not studied yet</div>`;
+  const r = fsrs.R(c), pct = Math.round(r * 100), dueIn = c.due_at - now();
+  return `<span class="str" title="FSRS · stability ${c.stability.toFixed(1)}d · difficulty ${c.difficulty.toFixed(1)}/10 · ${c.reps} reviews · ${c.lapses} lapses"><span class="bar"><i style="width:${pct}%;background:${BAND_COLOR[band(r)]}"></i></span><b>${pct}%</b></span>
+    <div class="str-help">${dueIn <= 0 ? '<span class="due" style="color:var(--color-rule);font-weight:600">Due now</span>' : `Next in ${fmtIval(dueIn)}`} · ${c.reps} reviews</div>`;
+}
+
+/* ----- Study session ----- */
+const RATINGS = [[1, "Again", "r1"], [2, "Hard", "r2"], [3, "Good", "r3"], [4, "Easy", "r4"]];
+function startStudy(deckId) {
+  const scope = deckId === "all" ? null : deckId;
+  const queue = studyQueue(scope);
+  if (!queue.length) { toast("Nothing due right now"); return; }
+  go("study", { deckId: scope });
+  ui.study = { deckId: scope, queue, idx: 0, revealed: false, results: [], before: stats(scope).score, beforeDecks: Object.fromEntries(db.decks.map(d => [d.id, stats(d.id).score])) };
+  render();
+}
+function viewStudy() {
+  const st = ui.study; if (!st) return "";
+  const scopeName = st.deckId ? db.decks.find(d => d.id === st.deckId)?.name : "All decks";
+  if (st.idx >= st.queue.length) return viewSummary(st, scopeName);
+  const c = db.cards.find(x => x.id === st.queue[st.idx]); const s = db.sources.find(x => x.id === c.source_id); const d = db.decks.find(x => x.id === c.deck_id);
+  const r = fsrs.R(c);
+  const pill = !c.stability ? `<span class="badge">New card</span>` : c.fsrs_state === "relearning" || c.fsrs_state === "learning" ? `<span class="badge badge-rule">Relearning</span>` : `<span class="badge badge-primary">Review · ${Math.round(r * 100)}% recall</span>`;
+  const top = `<div class="study-top"><button class="btn btn-ghost" id="endStudy">${ic("x")} End</button><div class="pbar" role="progressbar" aria-valuenow="${st.idx}" aria-valuemax="${st.queue.length}"><i style="width:${100 * st.idx / st.queue.length}%"></i></div><span>${st.idx + 1} / ${st.queue.length}</span></div>`;
+  const card = `<div class="flash" key="${c.id}-${st.idx}">
+    <div class="flash-meta">${pill}<span>${esc(d?.name)}</span></div>
+    <div class="q">${esc(c.question)}</div>
+    ${st.revealed ? `<hr class="rule"/><div class="a">${esc(c.answer)}</div><div class="excerpt">${esc(c.source_excerpt)}${s ? `<div style="font-style:normal;margin-top:var(--space-1);color:var(--color-faint)">${ic("link-2")} ${esc(s.title)}</div>` : ""}</div>`
+      : `<div class="hidden-a">Try to answer in your head, then reveal.</div>`}
+  </div>`;
+  const controls = st.revealed
+    ? `<div class="rates" role="group" aria-label="How well did you remember?">${RATINGS.map(([g, label, cls]) => `<button class="${cls}" data-rate="${g}"><span>${label}</span><small>${fmtIval(fsrs.next(c, g).due_at - now())}</small><kbd>${g}</kbd></button>`).join("")}</div>
+       <p class="study-hint">The time under each button is when you'll see this card next. Each answer is saved as you go.</p>`
+    : `<button class="btn btn-primary reveal" id="reveal">Show answer <kbd>Space</kbd></button>`;
+  return `<div class="study">${top}${card}${controls}</div>`;
+}
+function viewSummary(st, scopeName) {
+  const after = stats(st.deckId).score, res = st.results, uniq = new Set(res.map(x => x.card_id)).size;
+  const firstTry = {}; res.forEach(x => { if (!(x.card_id in firstTry)) firstTry[x.card_id] = x.rating; });
+  const recalled = Object.values(firstTry).filter(g => g > 1).length;
+  const delta = (after ?? 0) - (st.before ?? 0);
+  const touched = [...new Set(res.map(x => db.cards.find(c => c.id === x.card_id)?.deck_id))].filter(Boolean);
+  const nd = nextDueIn(st.deckId);
+  return `<div class="study"><div class="summary">
+    <div class="ic" style="width:56px;height:56px;margin:0 auto;display:grid;place-items:center;border-radius:50%;background:var(--color-success-hl);color:var(--color-success)">${ic("check")}</div>
+    <h1>Session complete</h1><p class="sub">${esc(scopeName)} · ${uniq} cards studied</p>
+    <div class="delta">${ring(st.before, 72, 6, "lg")}${ic("arrow-right")}${ring(after, 88, 7, "lg")}</div>
+    <p>Memory score <span class="${delta >= 0 ? "up" : "down"}">${delta >= 0 ? "+" : ""}${delta} points</span></p>
+    <div class="stats"><div class="stat"><b>${uniq ? Math.round(100 * recalled / uniq) : 0}%</b><span>recalled first time</span></div><div class="stat"><b>${res.length}</b><span>answers</span></div><div class="stat"><b>${nd ? fmtIval(nd) : "–"}</b><span>until next due</span></div></div>
+    ${touched.length > 1 ? `<div class="legend" style="justify-content:center;margin-bottom:var(--space-6)">${touched.map(id => { const b = st.beforeDecks[id], a = stats(id).score; return `<span>${esc(db.decks.find(d => d.id === id).name)}: ${b ?? "–"} → <b style="color:var(--color-text)">${a}</b></span>`; }).join("")}</div>` : ""}
+    <div class="actions" style="justify-content:center"><button class="btn btn-primary" data-go="today">${ic("graduation-cap")} Back to today</button>${st.deckId ? `<button class="btn btn-outline" data-deck="${st.deckId}">Open deck</button>` : ""}</div>
+  </div></div>`;
+}
+async function rate(g) {
+  const st = ui.study; if (!st || !st.revealed) return;
+  const id = st.queue[st.idx];
+  st.results.push({ card_id: id, rating: g });
+  await api.submitReview({ review_id: uuid(), card_id: id, rating: g });
+  if (g === 1) st.queue.push(id); // see it again later in this session
+  st.idx++; st.revealed = false; render();
 }
 
 function viewSheet() {
@@ -536,7 +835,7 @@ function viewSheet() {
       <div class="form-row"><label for="srcTitle">Title <span style="color:var(--color-faint);font-weight:400">(optional)</span></label><input class="field" id="srcTitle" value="${esc(sh.title)}" placeholder="e.g. TanStack Query docs — caching" /></div>
       <div class="form-row"><label for="srcText">Text</label><textarea class="field paste" id="srcText" placeholder="Paste an article, docs page or your own notes…">${esc(sh.text)}</textarea>
         <div class="hint"><button class="btn-ghost" id="useSample" style="text-decoration:underline">Use sample text</button><span id="counter" class="${over ? "over" : ""}">${len.toLocaleString()} / ${MAX_CHARS.toLocaleString()} characters${over ? " — too long, split it into smaller sources" : ""}</span></div></div>
-      <p style="font-size:var(--text-xs);color:var(--color-muted)">${ic("sparkles")} The model chooses how many cards to make, up to ${MAX_CARDS}. You'll review every draft before it's saved.</p>
+      <p style="font-size:var(--text-xs);color:var(--color-muted)">${ic("sparkles")} The model chooses how many cards to make, up to ${MAX_CARDS}. You'll check every draft before it's saved.</p>
     </div>
     <footer><span style="font-size:var(--text-xs);color:var(--color-faint)">Adding to <b style="color:var(--color-muted)">${esc(db.decks.find(d => d.id === ui.route.deckId)?.name)}</b></span>
       <button class="btn btn-primary" id="generate" ${!len || over ? "disabled" : ""}>${ic("sparkles")} Generate cards</button></footer>
@@ -562,9 +861,9 @@ function ensureReview(sourceId) {
 function viewReview(sourceId) {
   const s = db.sources.find(x => x.id === sourceId); const rv = ensureReview(sourceId);
   const kept = rv.items.filter(i => i.keep).length;
-  if (!rv.items.length) return `<div class="empty"><div class="ic">${ic("check")}</div><h3>Nothing to review</h3><p>All drafts from this source have been reviewed.</p><button class="btn btn-outline" data-deck="${s.deck_id}">Back to deck</button></div>`;
-  const head = `<div class="page-head" style="margin-bottom:var(--space-2)"><div><div class="crumb"><button data-deck="${s.deck_id}">${esc(db.decks.find(d => d.id === s.deck_id)?.name)}</button>${ic("chevron-right")}<span>Review</span></div>
-    <h1>Review ${rv.items.length} draft cards</h1><p class="sub">From “${esc(s.title)}”. Everything is kept unless you drop it.</p></div></div>`;
+  if (!rv.items.length) return `<div class="empty"><div class="ic">${ic("check")}</div><h3>Nothing to check</h3><p>All drafts from this source have been checked.</p><button class="btn btn-outline" data-deck="${s.deck_id}">Back to deck</button></div>`;
+  const head = `<div class="page-head" style="margin-bottom:var(--space-2)"><div><div class="crumb"><button data-deck="${s.deck_id}">${esc(db.decks.find(d => d.id === s.deck_id)?.name)}</button>${ic("chevron-right")}<span>Check drafts</span></div>
+    <h1>Check ${rv.items.length} draft cards</h1><p class="sub">From “${esc(s.title)}”. Everything is kept unless you drop it.</p></div></div>`;
   const bar = `<div class="review-bar"><span class="tally"><b>${kept}</b> kept · <b>${rv.items.length - kept}</b> dropped</span>
     <div class="actions">${ui.variant !== "C" ? `<button class="btn btn-ghost" id="keepAll">Keep all</button>` : ""}<button class="btn btn-primary" id="commit" ${rv.saving ? "disabled" : ""}>${rv.saving ? '<div class="spinner" style="width:14px;height:14px;margin:0;border-width:2px"></div> Saving' : `${ic("check")} Save ${kept} cards`}</button></div></div>`;
   const body = ui.variant === "A" ? reviewA(rv) : ui.variant === "B" ? reviewB(rv, s) : reviewC(rv);
@@ -619,10 +918,11 @@ function reviewC(rv) {
 function viewProto() {
   return `<div class="proto" role="toolbar" aria-label="Prototype controls">
     <button id="pPrev" aria-label="Previous variant">${ic("chevron-left")}</button>
-    <span class="lab">Review ${ui.variant}<span class="hide-sm"> — ${VARIANTS[ui.variant]}</span></span>
+    <span class="lab">Drafts ${ui.variant}<span class="hide-sm"> — ${VARIANTS[ui.variant]}</span></span>
     <button id="pNext" aria-label="Next variant">${ic("chevron-right")}</button>
     <span class="sep"></span>
     <button id="pErr" aria-pressed="${ui.simulateError}" title="Make the next Generation fail">${ic("zap")}<span class="hide-sm">Fail next</span></button>
+    <button id="pDay" title="Skip ahead one day to watch scores decay">${ic("fast-forward")}<span class="hide-sm">+1 day</span></button>
     <button id="pReset" title="Reset data">${ic("rotate-ccw")}<span class="hide-sm">Reset</span></button>
   </div>`;
 }
@@ -631,15 +931,25 @@ function viewProto() {
    BINDINGS
    ============================================================ */
 function bindProto() {
-  const cyc = d => { const k = Object.keys(VARIANTS); ui.variant = k[(k.indexOf(ui.variant) + d + k.length) % k.length]; setVariantInUrl(ui.variant); if (ui.review) ui.review.idx = 0; if (ui.authed && ui.route.name !== "review") { const s = db.sources.find(x => db.cards.some(c => c.source_id === x.id && c.status === "draft")); if (s) { ui.route = { name: "review", sourceId: s.id, deckId: s.deck_id }; } } render(); };
+  const cyc = d => { const k = Object.keys(VARIANTS); ui.variant = k[(k.indexOf(ui.variant) + d + k.length) % k.length]; setVariantInUrl(ui.variant); if (ui.review) ui.review.idx = 0; if (ui.authed && ui.route.name !== "review" && ui.route.name !== "study") { const s = db.sources.find(x => db.cards.some(c => c.source_id === x.id && c.status === "draft")); if (s) { ui.route = { name: "review", sourceId: s.id, deckId: s.deck_id }; } } render(); };
   $("#pPrev").onclick = () => cyc(-1); $("#pNext").onclick = () => cyc(1);
   $("#pErr").onclick = () => { ui.simulateError = !ui.simulateError; render(); toast(ui.simulateError ? "Next Generation will fail" : "Generation will succeed"); };
-  $("#pReset").onclick = () => { seed(); ui.review = null; ui.sheet = null; ui.genError = null; ui.tab = "cards"; go("decks"); toast("Prototype data reset"); };
+  $("#pDay").onclick = () => { clock.offset += DAY; render(); { const t = stats(); toast(`Skipped ahead to ${new Date(now()).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · memory score ${t.score ?? "–"}% · ${t.due} due`); } };
+  $("#pReset").onclick = () => { seed(); ui.review = null; ui.sheet = null; ui.genError = null; ui.tab = "cards"; go("today"); toast("Prototype data reset"); };
 }
 window.addEventListener("keydown", e => {
   const t = e.target; const typing = t.matches?.("input,textarea,[contenteditable]");
   if (e.key === "Escape") { if (ui.sheet) { ui.sheet = null; render(); } else if (ui.profileOpen) { ui.profileOpen = false; render(); } return; }
   if (typing) return;
+  if (ui.route.name === "study" && ui.study) {
+    const st = ui.study;
+    if (st.idx < st.queue.length) {
+      if ((e.key === " " || e.key === "Enter") && !st.revealed) { e.preventDefault(); st.revealed = true; render(); return; }
+      if (st.revealed && ["1", "2", "3", "4"].includes(e.key)) { rate(+e.key); return; }
+    }
+    return;
+  }
+  if (ui.route.name === "today" && e.key === "Enter" && !e.target.closest?.("button,[role=link]")) { $('[data-study="all"]')?.click(); return; }
   if (e.key === "ArrowLeft" && !(ui.variant === "C" && ui.route.name === "review")) $("#pPrev")?.click();
   if (e.key === "ArrowRight" && !(ui.variant === "C" && ui.route.name === "review")) $("#pNext")?.click();
   if (ui.route.name === "review" && ui.variant === "C" && ui.review) {
@@ -656,10 +966,11 @@ function bindShell() {
   bindProto();
   $("#openSide") && ($("#openSide").onclick = () => { ui.sideOpen = true; render(); });
   $("#me").onclick = () => { ui.profileOpen = !ui.profileOpen; render(); };
-  $("#signout") && ($("#signout").onclick = () => { ui.authed = false; ui.profileOpen = false; ui.route = { name: "decks" }; render(); toast("Signed out"); });
+  $("#signout") && ($("#signout").onclick = () => { ui.authed = false; ui.profileOpen = false; ui.route = { name: "today" }; render(); toast("Signed out"); });
   $("#sideNew").onclick = newDeck;
   document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
-  document.querySelectorAll("[data-deck]").forEach(b => b.onclick = () => { ui.tab = "cards"; ui.genError = null; go("deck", { deckId: b.dataset.deck }); });
+  document.querySelectorAll("[data-deck]").forEach(b => { b.onclick = () => { ui.tab = "cards"; ui.genError = null; go("deck", { deckId: b.dataset.deck }); }; if (b.matches("[role=link]")) b.onkeydown = e => { if (e.key === "Enter" && e.target === b) b.click(); }; });
+  document.querySelectorAll("[data-study]").forEach(b => b.onclick = e => { e.stopPropagation(); startStudy(b.dataset.study); });
   if (ui.sheet) {
     $("#closeSheet").onclick = () => { ui.sheet = null; render(); };
     $("#scrim").onclick = e => { if (e.target.id === "scrim") { ui.sheet = null; render(); } };
@@ -712,6 +1023,11 @@ function bindMain() {
     document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => { const row = b.closest(".card-row"); row.classList.add("leaving");
       const c = await api.deleteCard(b.dataset.del); setTimeout(() => { render(); toast("Card deleted", { label: "Undo", fn: () => { api.restoreCard(c); render(); } }); }, 200); });
   }
+  if (r.name === "study" && ui.study) {
+    $("#reveal") && ($("#reveal").onclick = () => { ui.study.revealed = true; render(); });
+    document.querySelectorAll("[data-rate]").forEach(b => b.onclick = () => rate(+b.dataset.rate));
+    $("#endStudy") && ($("#endStudy").onclick = () => { if (ui.study.results.length) { ui.study.queue = ui.study.queue.slice(0, ui.study.idx); render(); } else go("today"); });
+  }
   if (r.name === "review" && ui.review) {
     const rv = ui.review;
     document.querySelectorAll("[data-toggle]").forEach(b => b.onclick = () => { const i = rv.items.find(x => x.id === b.dataset.toggle); i.keep = !i.keep; render(); });
@@ -724,7 +1040,7 @@ function bindMain() {
     document.querySelectorAll("mark[data-mark]").forEach(m => m.onclick = () => document.querySelector(`[data-hover="${m.dataset.mark}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
     $("#keepAll") && ($("#keepAll").onclick = () => { rv.items.forEach(i => i.keep = true); render(); });
     const commit = async () => { rv.saving = true; render(); const kept = rv.items.filter(i => i.keep).map(i => ({ card_id: i.id, question: i.question, answer: i.answer }));
-      const n = await api.commitReview(rv.sourceId, kept); const deckId = db.sources.find(s => s.id === rv.sourceId).deck_id; ui.review = null; ui.tab = "cards"; go("deck", { deckId }); toast(`${n} cards added · ${rv.items.length - n} dropped`); };
+      const n = await api.commitReview(rv.sourceId, kept); const deckId = db.sources.find(s => s.id === rv.sourceId).deck_id; ui.review = null; ui.tab = "cards"; go("deck", { deckId }); toast(`${n} cards added · ${rv.items.length - n} dropped`, n ? { label: "Study them now", fn: () => startStudy(deckId) } : null); };
     $("#commit") && ($("#commit").onclick = commit);
     document.querySelectorAll("[data-commit2]").forEach(b => b.onclick = commit);
   }
