@@ -111,8 +111,8 @@ The 4-day build delivers the architecture, the paste → generate → check → 
 
 - A monorepo:
   - `apps/web`: TanStack Start, using pnpm.
-  - `apps/api`: FastAPI, managed with uv.
-  - `packages/api-client`: the generated TypeScript client.
+  - `apps/api`: FastAPI, managed with uv, with a flat `app/` package (`apps/api/app/`).
+  - `packages/api-client`: the generated TypeScript client. It's a separate package because a React Native (Expo) app is the planned second consumer. Auth stays out of it; each app adds its token through the client's config.
 - pnpm workspaces for the TypeScript side, and uv for Python.
 - A root `justfile` for commands that span both sides: `just dev`, `just gen-client`, `just test`, `just lint`.
 - Docker Compose runs Postgres with pgvector. The api and web containers are optional for local dev and required for E2E.
