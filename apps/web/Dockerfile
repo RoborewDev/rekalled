@@ -42,11 +42,12 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 COPY --from=builder --chown=node:node /app/.output ./.output
+COPY --from=builder --chown=node:node /app/docker/healthcheck.mjs ./healthcheck.mjs
 # Numeric UID/GID of the base image's `node` user (hadolint DL3066).
 USER 1000
 EXPOSE 3000
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
-    CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    CMD ["node", "/app/healthcheck.mjs"]
 
 CMD ["node", ".output/server/index.mjs"]

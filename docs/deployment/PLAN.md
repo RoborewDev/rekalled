@@ -241,15 +241,14 @@ Coolify should pull a pre-built image. It should not build one.
    - API: New resource → Docker Image →
      `registry.digitalocean.com/<registry>/rekalled-api`, tag `sha-…` (CI overwrites it).
      - Port 8000. Domain `api.<env-domain>`.
-     - Health check type **CMD**:
-       `python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/health', timeout=4)"`
-       with interval 10, timeout 5, retries 3 and start period 60.
-     - Coolify's HTTP checks need curl or wget inside the image, and slim images have neither
+     - Health check type **CMD**: `python /app/docker/healthcheck.py`, with interval 10,
+       timeout 5, retries 3 and start period 60.
+     - The check is a script in the image because Coolify rejects quotes and brackets in
+       health check commands, and the slim images have no curl or wget for HTTP checks
        ([Coolify health checks](https://coolify.io/docs/knowledge-base/health-checks)).
-       The CMD check reuses the image's own Python.
    - Web: Docker Image → `…/rekalled-web`, port 3000, domain `<env-domain>`.
-     - Health check type **CMD**:
-       `node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"`
+     - Health check type **CMD**: `node /app/healthcheck.mjs`, with interval 10, timeout 5,
+       retries 3 and start period 20.
 3. Don't map host ports and don't set a custom container name. Either one disables rolling
    updates.
 4. API environment variables in Coolify:

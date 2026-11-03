@@ -83,7 +83,7 @@ EXPOSE 8000
 # Coolify waits for this before switching traffic (rolling update), and keeps the old
 # container if it never passes. start-period covers migrations running at start-up.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=3 \
-    CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('PORT', '8000')}/v1/health\", timeout=4)"]
+    CMD ["python", "/app/docker/healthcheck.py"]
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
 CMD ["/app/docker/start.sh"]
