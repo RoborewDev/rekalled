@@ -41,17 +41,17 @@ ARG TARGETARCH
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
- && rm -rf /var/lib/apt/lists/* \
- && case "${TARGETARCH:-amd64}" in \
-      amd64) sum="${INFISICAL_SHA256_AMD64}" ;; \
-      arm64) sum="${INFISICAL_SHA256_ARM64}" ;; \
-      *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    && rm -rf /var/lib/apt/lists/* \
+    && case "${TARGETARCH:-amd64}" in \
+    amd64) sum="${INFISICAL_SHA256_AMD64}" ;; \
+    arm64) sum="${INFISICAL_SHA256_ARM64}" ;; \
+    *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
- && curl -fsSL -o /tmp/infisical.tgz \
-      "https://github.com/Infisical/cli/releases/download/v${INFISICAL_VERSION}/cli_${INFISICAL_VERSION}_linux_${TARGETARCH:-amd64}.tar.gz" \
- && echo "${sum}  /tmp/infisical.tgz" | sha256sum -c - \
- && tar -xzf /tmp/infisical.tgz -C /usr/local/bin infisical \
- && /usr/local/bin/infisical --version
+    && curl -fsSL -o /tmp/infisical.tgz \
+    "https://github.com/Infisical/cli/releases/download/v${INFISICAL_VERSION}/cli_${INFISICAL_VERSION}_linux_${TARGETARCH:-amd64}.tar.gz" \
+    && echo "${sum}  /tmp/infisical.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/infisical.tgz -C /usr/local/bin infisical \
+    && /usr/local/bin/infisical --version
 
 # ---------------------------------------------------------------------------
 # Stage 3: runtime. No uv, no compilers, no dev dependencies, non-root user.
@@ -61,10 +61,10 @@ FROM python:${PYTHON_VERSION}-slim AS runtime
 # Which commit this image was built from. Reported by /v1/health (Settings.git_sha).
 ARG GIT_SHA=local
 LABEL org.opencontainers.image.title="rekalled-api" \
-      org.opencontainers.image.revision="${GIT_SHA}"
+    org.opencontainers.image.revision="${GIT_SHA}"
 
 RUN groupadd --system --gid 10001 app \
- && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
+    && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 
 COPY --from=infisical /usr/local/bin/infisical /usr/local/bin/infisical
 COPY --from=builder --chown=app:app /app /app
@@ -76,13 +76,14 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     PORT=8000
 
 WORKDIR /app
-USER app
+# Numeric UID/GID: resolvable even where the name isn't (hadolint DL3066).
+USER 10001
 EXPOSE 8000
 
 # Coolify waits for this before switching traffic (rolling update), and keeps the old
 # container if it never passes. start-period covers migrations running at start-up.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=3 \
-  CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('PORT', '8000')}/v1/health\", timeout=4)"]
+    CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('PORT', '8000')}/v1/health\", timeout=4)"]
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
 CMD ["/app/docker/start.sh"]
