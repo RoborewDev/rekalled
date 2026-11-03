@@ -4,7 +4,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import get_settings
 from app.models import Base
@@ -12,7 +12,8 @@ from app.models import Base
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# The URL comes from Settings, not alembic.ini. It is passed straight to SQLAlchemy:
+# config.set_main_option would choke on the % in URL-encoded passwords.
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -41,7 +42,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_settings().database_url.get_secret_value()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -66,10 +67,8 @@ async def run_async_migrations() -> None:
 
     """
 
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
+    connectable = create_async_engine(
+        get_settings().database_url.get_secret_value(), poolclass=pool.NullPool
     )
 
     async with connectable.connect() as connection:

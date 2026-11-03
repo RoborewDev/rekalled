@@ -1,10 +1,25 @@
 import os
 
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+
+from app.core.config import ENV_FILES
+
+
+class _TestDatabase(BaseSettings):
+    # TEST_DATABASE_URL from the environment or .env. No fallback: tests never guess a DB.
+    model_config = SettingsConfigDict(env_file=ENV_FILES, extra="ignore")
+
+    test_database_url: str
+
+
+TEST_DATABASE_URL = _TestDatabase.model_validate({}).test_database_url
+if not (make_url(TEST_DATABASE_URL).database or "").endswith("_test"):
+    raise RuntimeError("Refusing to run tests against a non-test database (name must end in _test)")
+
 os.environ["ENV"] = "test"
+os.environ["AUTH_MODE"] = "dev"
 # Hard override: a dev DATABASE_URL exported by `just`/dotenv must never leak into tests.
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5433/rekalled_test"
-)
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from collections.abc import AsyncIterator  # noqa: E402

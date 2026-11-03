@@ -2,16 +2,16 @@ from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, SettingsDep
 from app.auth.dev import dev_principal
 from app.auth.principal import Principal
-from app.core.config import get_settings
 from app.models import User
 from app.services.users import get_or_create_user
 
 
-async def get_principal(x_dev_user: Annotated[str | None, Header()] = None) -> Principal:
-    settings = get_settings()
+async def get_principal(
+    settings: SettingsDep, x_dev_user: Annotated[str | None, Header()] = None
+) -> Principal:
     if settings.auth_mode == "dev":
         return dev_principal(x_dev_user)
     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
