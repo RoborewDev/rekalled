@@ -150,9 +150,9 @@ mv "$merged_file" "$SECRETS_ENV_FILE"
 
 # Drop pulled keys (and the legacy appended section) from .env: a key left there would be
 # exported by `just`'s dotenv-load, and real environment variables win over .env.local.
-# INFISICAL_* bootstrap vars stay in .env; everything else Infisical serves moves out.
-awk -F= '/^[A-Za-z_][A-Za-z0-9_]*=/ { if ($1 !~ /^INFISICAL_/) print $1 }' \
-  "$raw_export" > "$pulled_keys"
+# The removal list is exactly what the merge accepted into .env.local (non-empty values,
+# no INFISICAL_*): an empty Infisical value keeps the local one instead of deleting it.
+awk -F= '/^[A-Za-z_][A-Za-z0-9_]*=/ { print $1 }' "$merged_sorted" > "$pulled_keys"
 awk -v keys="$pulled_keys" '
   BEGIN { while ((getline k < keys) > 0) drop[k] = 1 }
   /^# Pulled from Infisical/ { exit }
@@ -161,6 +161,7 @@ awk -v keys="$pulled_keys" '
     if (eq > 0) {
       key = substr($0, 1, eq - 1)
       gsub(/^[ \t]+|[ \t]+$/, "", key)
+      sub(/^export[ \t]+/, "", key) # `just` accepts `export KEY=...` in .env
       if (key in drop) next
     }
     print
