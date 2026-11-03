@@ -13,10 +13,21 @@ repo="${1:?repository}"; keep="${2:?keep count}"
 base="https://api.digitalocean.com/v2/registry/${DO_REGISTRY_NAME}/repositories/${repo}/tags"
 auth=(-H "Authorization: Bearer ${DIGITALOCEAN_ACCESS_TOKEN}")
 
-mapfile -t old < <(curl -fsS "${auth[@]}" "${base}?per_page=200" \
-  | jq -r --argjson keep "$keep" \
-      '[.tags[] | select(.tag | startswith("sha-"))] | sort_by(.updated_at) | reverse
-       | .[$keep:] | .[].tag')
+# Command substitution, not a process substitution: a curl or jq failure then stops the
+# script under set -e instead of silently pruning nothing. Page through the API so a
+# repository with more than one page of tags is pruned too.
+all=""
+page=1
+while :; do
+  body="$(curl -fsS "${auth[@]}" "${base}?page=${page}&per_page=200")"
+  page_tags="$(jq -r '.tags[] | select(.tag | startswith("sha-")) | [.updated_at, .tag] | @tsv' <<<"$body")"
+  all="${all}${page_tags}"$'\n'
+  [ "$(jq -r '.tags | length' <<<"$body")" -lt 200 ] && break
+  page=$((page + 1))
+done
+
+# Newest first by updated_at (ISO timestamps sort lexically); keep the newest <keep>.
+mapfile -t old < <(printf '%s' "$all" | LC_ALL=C sort -r | awk -v keep="$keep" 'NR > keep { print $2 }')
 
 for tag in "${old[@]}"; do
   echo "Deleting ${repo}:${tag}"

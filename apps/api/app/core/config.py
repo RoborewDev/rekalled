@@ -6,9 +6,10 @@ from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_DIR = Path(__file__).resolve().parents[2]  # apps/api
-# Repo-root .env first, then an optional apps/api/.env that overrides it. Anchored to this
-# file, not the working directory. Real environment variables win over both.
-ENV_FILES = (API_DIR.parent.parent / ".env", API_DIR / ".env")
+# Repo-root .env first, then an optional apps/api/.env, then the root .env.local written by
+# scripts/env-pull.sh — later files override earlier ones. Anchored to this file, not the
+# working directory. Real environment variables win over all of them.
+ENV_FILES = (API_DIR.parent.parent / ".env", API_DIR / ".env", API_DIR.parent.parent / ".env.local")
 
 
 class Settings(BaseSettings):

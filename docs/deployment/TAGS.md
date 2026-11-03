@@ -28,7 +28,7 @@ There's nothing to tag by hand, and staging always runs the latest `main`.
 
 3. The promote workflow then:
    - checks the tag matches `vMAJOR.MINOR.PATCH` and the commit is on `main`;
-   - checks that commit's staging deployment succeeded;
+   - checks that commit's staging release run succeeded (a re-run counts as its latest attempt);
    - adds `v0.3.0` as a second tag on the existing `sha-…` images, with no rebuild and the same digest;
    - deploys `v0.3.0` to production, API first, then web;
    - creates a GitHub release with generated notes.

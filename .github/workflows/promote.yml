@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      deployments: read # read staging deployment results for this commit
+      actions: read # read the release run result for this commit
     outputs:
       version: ${{ steps.version.outputs.version }}
       sha: ${{ steps.commit.outputs.sha }}
@@ -78,13 +78,13 @@ jobs:
           digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
 
           staging_verified() {
-            # Every staging deployment recorded for this exact commit must have succeeded.
-            ids="$(gh api "repos/${REPO}/deployments?environment=staging&sha=${SHA}&per_page=100" --jq '.[].id')"
-            [ -n "$ids" ] || return 1
-            for id in $ids; do
-              state="$(gh api "repos/${REPO}/deployments/${id}/statuses?per_page=1" --jq '.[0].state')"
-              [ "$state" = success ] || return 1
-            done
+            # The release run for this commit built, scanned and deployed it to staging; a
+            # re-run updates the same run, so a retried flake still counts. Checking per-
+            # deployment records instead would break on retries (old failed record lingers)
+            # and on older commits whose deployments GitHub later marked inactive.
+            conclusion="$(gh api "repos/${REPO}/actions/workflows/release.yml/runs?head_sha=${SHA}&event=push&per_page=1" \
+              --jq '.workflow_runs[0].conclusion // empty')"
+            [ "$conclusion" = success ]
           }
 
           for app in rekalled-api rekalled-web; do
@@ -93,7 +93,7 @@ jobs:
               echo "${app}:${VERSION} exists ($(digest "${PREFIX}/${app}:${VERSION}"))"
               continue
             fi
-            staging_verified || { echo "::error::${SHORT} has no successful staging deployment. Merge to main and let staging go green first."; exit 1; }
+            staging_verified || { echo "::error::${SHORT} has no successful staging release run. Merge to main and let staging go green first."; exit 1; }
             src="${PREFIX}/${app}:sha-${SHORT}"
             docker buildx imagetools create --tag "${PREFIX}/${app}:${VERSION}" "$src"
             [ "$(digest "$src")" = "$(digest "${PREFIX}/${app}:${VERSION}")" ] \

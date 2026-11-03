@@ -98,7 +98,7 @@ Full plan: [`docs/deployment/PLAN.md`](docs/deployment/PLAN.md); the step-by-ste
 - **Parity:** staging runs `ENV=production` and the same secret keys as prod (different values), so a forgotten variable surfaces as a failed staging deploy. No `VITE_*` build-time value may differ between environments.
 - **Secrets:** Infisical at runtime. Coolify holds only the bootstrap (`INFISICAL_*` credentials); the API entrypoint logs in, drops the secret, and `exec`s the app with injected env vars. The web image has no secrets.
 - **Supply chain:** every action pinned to a full commit SHA, Grype (not Trivy) image scans, SBOM + provenance attestations, `permissions: contents: read` defaults, actionlint/zizmor clean.
-- **Release:** check staging → `git tag -a vX.Y.Z` on `main` → push. The promote workflow verifies the tag is on `main` and green on staging before touching production.
+- **Release:** check staging → `git tag -a vX.Y.Z` on `main` → push. For a new image, the promote workflow verifies the tag is on `main` and green on staging before touching production. An existing version image (rollback) is redeployed without repeating the staging check.
 - **Rollback:** re-run the Promote workflow with the previous version. The existing image is redeployed — nothing is rebuilt. Works because migrations are backward compatible.
 - **Hotfix:** same as a feature PR. No release branches; `main` is always releasable.
 

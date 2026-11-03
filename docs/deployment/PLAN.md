@@ -284,8 +284,9 @@ Commands for each of these are in [`TAGS.md`](TAGS.md).
 - Release:
   1. Check staging.
   2. `git tag -a v0.3.0 -m "Decks" origin/main && git push origin v0.3.0`
-  3. Production updates to the same image. The workflow refuses if that commit isn't green on
-     staging.
+  3. Production updates to the same image. For a new image, the workflow refuses if that
+     commit isn't green on staging. An existing version image (rollback) is redeployed
+     without repeating the staging check.
 - Rollback: run Promote manually with the previous version. If a migration was involved, it
   has to be backward compatible under rule 5, so the old code still runs.
 - Hotfix: the same as a feature PR. There are no release branches. Main is always releasable.

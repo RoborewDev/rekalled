@@ -54,6 +54,12 @@ done
 
 # Coolify "finished" means the new container passed its healthcheck. The public check
 # below proves the proxy now routes to it, and for the API that it runs the right commit.
+# An expected SHA can only be checked through the health URL: refuse to report the deploy
+# as verified when that URL is missing.
+if [ -n "$expected_sha" ] && [ -z "$health_url" ]; then
+  echo "::error::expected-sha was given but no health URL was: the served commit cannot be verified" >&2
+  exit 1
+fi
 if [ -n "$health_url" ]; then
   for _ in $(seq 1 30); do
     if body="$(curl -fsS --max-time 5 "$health_url" 2>/dev/null)"; then

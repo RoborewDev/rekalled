@@ -2,11 +2,11 @@
 # Pull application secrets from Infisical and merge them into .env.local.
 #
 # Requires INFISICAL_* bootstrap vars in .env (see .env.example and
-# docs/guides/blocshed-ci-cd-coolify.md). Skips empty Infisical values.
+# docs/deployment/PLAN.md). Skips empty Infisical values.
 # Never overwrites INFISICAL_* bootstrap vars.
 # Keep Infisical bootstrap vars in .env; pulled application secrets land in .env.local.
 #
-# Usage: yarn env:pull
+# Usage: bash scripts/env-pull.sh
 set -euo pipefail
 umask 077
 
@@ -32,7 +32,7 @@ fi
 
 if [[ ! -f "$SECRETS_ENV_FILE" ]]; then
   cat > "$SECRETS_ENV_FILE" <<'EOF'
-# Pulled from Infisical via yarn env:pull — do not commit.
+# Pulled from Infisical via bash scripts/env-pull.sh — do not commit.
 # Keep Infisical bootstrap vars in .env.
 EOF
 fi
@@ -61,7 +61,9 @@ fi
 raw_export="$(mktemp)"
 merged_sorted="$(mktemp)"
 merged_file="$(mktemp)"
-trap 'rm -f "$raw_export" "$merged_sorted" "$merged_file"' EXIT
+pulled_keys="$(mktemp)"
+bootstrap_clean="$(mktemp)"
+trap 'rm -f "$raw_export" "$merged_sorted" "$merged_file" "$pulled_keys" "$bootstrap_clean"' EXIT
 
 echo "Pulling Infisical secrets (env=$env_slug) into $SECRETS_ENV_FILE"
 token="$(
@@ -136,27 +138,38 @@ END {
 
 {
   cat <<EOF
-# Pulled from Infisical via yarn env:pull — do not commit.
+# Pulled from Infisical via bash scripts/env-pull.sh — do not commit.
 # Keep Infisical bootstrap vars in .env.
 
-# Pulled from Infisical ($env_slug) via yarn env:pull
+# Pulled from Infisical ($env_slug) via bash scripts/env-pull.sh
 EOF
   cat "$merged_sorted"
 } > "$merged_file"
 
 mv "$merged_file" "$SECRETS_ENV_FILE"
-trap - EXIT
-rm -f "$raw_export" "$merged_sorted"
 
-# Drop legacy pulled secrets from .env (older env:pull wrote them here).
-# Only removes the section appended below the "# Pulled from Infisical" comment
-# by the old version of this script; all vars above that line are preserved.
-bootstrap_clean="$(mktemp)"
-awk '
-/^# Pulled from Infisical/ { exit }
-{ print }
+# Drop pulled keys (and the legacy appended section) from .env: a key left there would be
+# exported by `just`'s dotenv-load, and real environment variables win over .env.local.
+# INFISICAL_* bootstrap vars stay in .env; everything else Infisical serves moves out.
+awk -F= '/^[A-Za-z_][A-Za-z0-9_]*=/ { if ($1 !~ /^INFISICAL_/) print $1 }' \
+  "$raw_export" > "$pulled_keys"
+awk -v keys="$pulled_keys" '
+  BEGIN { while ((getline k < keys) > 0) drop[k] = 1 }
+  /^# Pulled from Infisical/ { exit }
+  {
+    eq = index($0, "=")
+    if (eq > 0) {
+      key = substr($0, 1, eq - 1)
+      gsub(/^[ \t]+|[ \t]+$/, "", key)
+      if (key in drop) next
+    }
+    print
+  }
 ' "$BOOTSTRAP_ENV_FILE" > "$bootstrap_clean"
 mv "$bootstrap_clean" "$BOOTSTRAP_ENV_FILE"
+
+trap - EXIT
+rm -f "$raw_export" "$merged_sorted" "$pulled_keys"
 
 echo "Merged Infisical secrets into $SECRETS_ENV_FILE"
 echo "Bootstrap vars stay in $BOOTSTRAP_ENV_FILE; skipped: INFISICAL_* (and empty Infisical values)"
