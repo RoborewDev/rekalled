@@ -1,0 +1,74 @@
+# Reusable deploy: point the Coolify apps of ONE environment at an existing image tag.
+# Staging and production run this same file; only the GitHub environment differs, and
+# each environment holds its own COOLIFY_* variables and secret under the same names.
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment (staging or production)
+        type: string
+        required: true
+      image-tag:
+        description: Image tag that already exists in the registry (sha-<12> or vX.Y.Z)
+        type: string
+        required: true
+      expected-sha:
+        description: Full commit SHA the API must report from /v1/health after deploy
+        type: string
+        required: true
+
+permissions:
+  contents: read # default for every job; jobs ask for more only when they need it
+
+jobs:
+  # API first: the new web may call new endpoints, and migrations are expand/contract so
+  # the old web keeps working against the new API.
+  api:
+    name: API -> ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.API_HEALTH_URL }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}-api
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Deploy API
+        env:
+          COOLIFY_BASE_URL: ${{ vars.COOLIFY_BASE_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          APP_UUID: ${{ vars.COOLIFY_API_UUID }}
+          HEALTH_URL: ${{ vars.API_HEALTH_URL }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          EXPECTED_SHA: ${{ inputs.expected-sha }}
+        run: scripts/deploy/coolify-deploy.sh "$APP_UUID" "$IMAGE_TAG" "$HEALTH_URL" "$EXPECTED_SHA"
+
+  web:
+    name: Web -> ${{ inputs.environment }}
+    needs: api
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.WEB_URL }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}-web
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Deploy web
+        env:
+          COOLIFY_BASE_URL: ${{ vars.COOLIFY_BASE_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          APP_UUID: ${{ vars.COOLIFY_WEB_UUID }}
+          WEB_URL: ${{ vars.WEB_URL }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+        run: scripts/deploy/coolify-deploy.sh "$APP_UUID" "$IMAGE_TAG" "$WEB_URL"

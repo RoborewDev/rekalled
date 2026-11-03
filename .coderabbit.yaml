@@ -1,0 +1,177 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit review configuration. Reference: https://docs.coderabbit.ai/reference/configuration
+# The "CodeRabbit" check run is a required status check on main (see docs/deployment/PLAN.md).
+language: en-GB
+tone_instructions: >-
+  Direct and specific. Explain why a change matters and link the relevant doc when you can.
+  This repo is also a learning project, so prefer one clear explanation over many nitpicks.
+
+reviews:
+  profile: assertive
+  high_level_summary: true
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: true
+  poem: false
+  in_progress_fortune: false
+  # A review that errors out fails the CodeRabbit check, so a broken review cannot be merged
+  # through by accident. Rate-limited reviews still pass.
+  fail_commit_status: true
+  # Request changes for blocking findings; approve once threads are resolved, the latest
+  # commit is reviewed and the pre-merge checks pass.
+  auto_approvals:
+    enabled: true
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    base_branches: ["main"]
+
+  # Generated or vendored files only. .github/** is deliberately NOT excluded: workflows
+  # hold deploy credentials and deserve the closest review.
+  path_filters:
+    - "!**/uv.lock"
+    - "!**/pnpm-lock.yaml"
+    - "!apps/web/src/routeTree.gen.ts"
+    - "!**/.output/**"
+    - "!docs/prototype/**"
+
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: >-
+        Conventional Commits style, imperative mood, under 72 characters
+        (e.g. "feat(api): add deck endpoints", "ci: pin grype action").
+    description:
+      mode: warning
+    docstrings:
+      mode: "off"
+    custom_checks:
+      - name: Tests accompany behaviour changes
+        mode: error
+        instructions: >-
+          Fail if the PR changes behaviour in apps/api/app/** or apps/web/src/** (new or
+          changed endpoints, services, validation, auth, routes or hooks) without adding or
+          updating a test under apps/api/tests/** or a *.test.ts(x) file. Pure refactors,
+          renames, comments, docs, CI and dependency bumps pass.
+      - name: Migrations are backward compatible
+        mode: error
+        instructions: >-
+          Only applies when apps/api/migrations/versions/** changes. Migrations run when the
+          new API container starts, while the previous release is still serving traffic, so
+          they must follow expand/contract. Fail if a single migration drops or renames a
+          column or table that the code on main still reads, adds a NOT NULL column without a
+          server default, or changes a column type in place. Pass if destructive steps are in
+          a later, separate PR after the code stopped using them.
+      - name: No per-environment build-time config
+        mode: error
+        instructions: >-
+          The same Docker image runs in staging and production. Fail if the PR adds a
+          VITE_* variable whose value would differ between staging and production (URLs,
+          app IDs, keys), or adds an environment-specific Docker build argument or a
+          branch-specific image tag. Runtime configuration must come from environment
+          variables read at start-up.
+
+  path_instructions:
+    - path: "apps/api/app/api/**"
+      instructions: >-
+        FastAPI route modules under /v1. Routes stay thin: parse and validate input with
+        Pydantic schemas, call a service, map the result to a response model. No SQL or
+        business rules here. Every non-health route requires the current user dependency.
+        Check status codes, response_model, and that errors are HTTPException with a safe detail.
+    - path: "apps/api/app/services/**"
+      instructions: >-
+        Business logic lives here and FastAPI is its only owner. Services take an
+        AsyncSession and plain arguments, never Request objects. Every query must be scoped
+        to the owning user (no cross-tenant reads). FSRS review writes must stay idempotent
+        on the client-supplied review id.
+    - path: "apps/api/app/auth/**"
+      instructions: >-
+        Only this package may know about Logto. Tokens are validated with PyJWT against the
+        Logto JWKS: check issuer, audience, expiry and algorithm allowlist. No custom password
+        handling, session cookies or token minting. AUTH_MODE=dev must be impossible outside
+        ENV development/test.
+    - path: "apps/api/app/core/**"
+      instructions: >-
+        Settings must fail fast on missing or unsafe values and never log secrets (SecretStr,
+        hide_input_in_errors). New settings need a test in tests/test_config.py.
+    - path: "apps/api/migrations/**"
+      instructions: >-
+        Alembic migrations. Expand/contract only (see the pre-merge check). Prefer explicit
+        operations over autogenerate leftovers, name constraints and indexes, and make
+        downgrade() correct or explicitly unsupported. env.py holds the advisory lock that
+        stops two containers migrating at once; do not remove it.
+    - path: "apps/web/src/**"
+      instructions: >-
+        TanStack Start is a thin presentation layer. No business logic or database access in
+        server functions or routes; data comes from the FastAPI /v1 API through the generated
+        typed client and TanStack Query. Only src/auth/** may import @logto/react. Never store
+        tokens in localStorage or sessionStorage by hand.
+    - path: ".github/**"
+      instructions: >-
+        Treat workflows as production code with secrets. Every third-party action must be
+        pinned to a full commit SHA with a version comment. Default permissions are
+        contents: read and jobs widen them only with a comment saying why. Checkout uses
+        persist-credentials: false. Never use pull_request_target or interpolate
+        ${{ github.event.* }} or inputs directly into run: scripts (pass them via env).
+        Do not suggest aquasecurity/trivy-action or setup-trivy (compromised March 2026).
+        Images are built once per main commit and promoted by retagging: flag anything that
+        rebuilds for production or adds a mutable tag such as latest.
+    - path: "**/Dockerfile"
+      instructions: >-
+        Multi-stage, non-root runtime user, pinned base image versions, no secrets in ARG or
+        ENV, HEALTHCHECK present (Coolify rolling updates depend on it), and nothing
+        environment-specific baked in.
+    - path: "scripts/**/*.sh"
+      instructions: >-
+        Bash with set -euo pipefail, quoted variables, curl -f so HTTP errors fail, and no
+        secrets echoed to logs.
+
+  tools:
+    ruff:
+      enabled: true
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    hadolint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trivy:
+      enabled: true
+    osvScanner:
+      enabled: true
+    yamllint:
+      enabled: true
+    dotenvLint:
+      enabled: true
+    squawk:
+      enabled: true
+    markdownlint:
+      enabled: true
+    oxc:
+      enabled: true
+    # The web app lints with Vite+ (oxlint) and the API with ruff; avoid duplicate noise.
+    eslint:
+      enabled: false
+    biome:
+      enabled: false
+    pylint:
+      enabled: false
+    flake8:
+      enabled: false
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+      - "**/AGENTS.md"
+      - "docs/deployment/PLAN.md"

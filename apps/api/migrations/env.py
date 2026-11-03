@@ -2,7 +2,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -54,10 +54,18 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+# Any fixed number works; it just has to be the same for every process that migrates.
+MIGRATION_LOCK_ID = 7_142_001
+
+
 def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
+        # Containers run `alembic upgrade head` when they start. If two start at once, the
+        # second waits here until the first commits, then finds nothing left to apply.
+        # A transaction-level lock is released automatically on commit or rollback.
+        connection.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": MIGRATION_LOCK_ID})
         context.run_migrations()
 
 

@@ -37,7 +37,27 @@ def test_env_files_do_not_depend_on_the_working_directory(monkeypatch, tmp_path)
 
     env_files = [Path(p) for p in Settings.model_config["env_file"]]  # type: ignore[union-attr]
 
-    assert env_files == [api_dir.parent.parent / ".env", api_dir / ".env"]
+    assert env_files == [
+        api_dir.parent.parent / ".env",
+        api_dir / ".env",
+        api_dir.parent.parent / ".env.local",
+    ]
+
+
+def test_git_sha_defaults_to_local(monkeypatch):
+    monkeypatch.delenv("GIT_SHA", raising=False)
+
+    settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+
+    assert settings.git_sha == "local"
+
+
+def test_git_sha_reads_the_environment(monkeypatch):
+    monkeypatch.setenv("GIT_SHA", "abc")
+
+    settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+
+    assert settings.git_sha == "abc"
 
 
 def test_auth_mode_is_required(monkeypatch):

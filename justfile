@@ -30,3 +30,14 @@ test: test-api test-web
 lint:
     cd apps/api && uv run ruff check . && uv run ruff format --check . && uv run mypy app
     cd apps/web && vp check
+
+# Build both production images locally with the same Dockerfiles CI uses
+images:
+    docker build -t rekalled-api:local --build-arg GIT_SHA=$(git rev-parse HEAD) apps/api
+    docker build -t rekalled-web:local --build-arg GIT_SHA=$(git rev-parse HEAD) apps/web
+
+# Run the CI smoke test against locally built images. Uses a throwaway database:
+# create it first, e.g. `docker compose exec db createdb -U postgres rekalled_smoke`
+smoke: images
+    SMOKE_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT}/rekalled_smoke \
+    scripts/ci/smoke-images.sh rekalled-api:local rekalled-web:local $(git rev-parse HEAD)
