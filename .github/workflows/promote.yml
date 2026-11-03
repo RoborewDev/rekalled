@@ -1,0 +1,128 @@
+# Promote to production. Pushing a semver tag (v1.2.3) on a commit that staging already
+# runs re-points production at THE SAME image: no rebuild, same digest, plus a vX.Y.Z
+# alias in the registry. Running it manually with an older version is the rollback.
+name: Promote (tag -> production)
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing release tag to (re)deploy to production, e.g. v1.2.3
+        required: true
+        type: string
+
+permissions:
+  contents: read # default for every job; jobs ask for more only when they need it
+
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Verify and tag images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: read # read staging deployment results for this commit
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - name: Resolve version
+        id: version
+        env:
+          # Passed through env, never interpolated into the script (input is user-controlled).
+          VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        run: |
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'${VERSION}' is not a vMAJOR.MINOR.PATCH tag"; exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Tagged commit is on main
+        id: commit
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          sha="$(git rev-parse --verify "refs/tags/${VERSION}^{commit}")"
+          git merge-base --is-ancestor "$sha" origin/main \
+            || { echo "::error::${VERSION} (${sha}) is not on main"; exit 1; }
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "short=${sha::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ${{ vars.REGISTRY }}
+          username: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          password: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Promote images (registry-side retag, same digest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.commit.outputs.sha }}
+          SHORT: ${{ steps.commit.outputs.short }}
+          PREFIX: ${{ vars.REGISTRY }}/${{ vars.DO_REGISTRY_NAME }}
+        run: |
+          digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
+
+          staging_verified() {
+            # Every staging deployment recorded for this exact commit must have succeeded.
+            ids="$(gh api "repos/${REPO}/deployments?environment=staging&sha=${SHA}&per_page=100" --jq '.[].id')"
+            [ -n "$ids" ] || return 1
+            for id in $ids; do
+              state="$(gh api "repos/${REPO}/deployments/${id}/statuses?per_page=1" --jq '.[0].state')"
+              [ "$state" = success ] || return 1
+            done
+          }
+
+          for app in rekalled-api rekalled-web; do
+            if docker buildx imagetools inspect "${PREFIX}/${app}:${VERSION}" >/dev/null 2>&1; then
+              # Re-deploy / rollback of an existing release: the image is already promoted.
+              echo "${app}:${VERSION} exists ($(digest "${PREFIX}/${app}:${VERSION}"))"
+              continue
+            fi
+            staging_verified || { echo "::error::${SHORT} has no successful staging deployment. Merge to main and let staging go green first."; exit 1; }
+            src="${PREFIX}/${app}:sha-${SHORT}"
+            docker buildx imagetools create --tag "${PREFIX}/${app}:${VERSION}" "$src"
+            [ "$(digest "$src")" = "$(digest "${PREFIX}/${app}:${VERSION}")" ] \
+              || { echo "::error::${app}:${VERSION} digest differs from ${src}"; exit 1; }
+            echo "${app}: ${VERSION} -> $(digest "$src")"
+          done
+
+  production:
+    name: Deploy to production
+    needs: prepare
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      image-tag: ${{ needs.prepare.outputs.version }}
+      expected-sha: ${{ needs.prepare.outputs.sha }}
+
+  github-release:
+    name: GitHub release notes
+    if: github.event_name == 'push'
+    needs: [prepare, production]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # create the GitHub release for this tag
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          gh release view "$VERSION" --repo "$REPO" >/dev/null 2>&1 \
+            || gh release create "$VERSION" --repo "$REPO" --verify-tag --generate-notes

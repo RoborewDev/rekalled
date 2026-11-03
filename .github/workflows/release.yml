@@ -1,0 +1,151 @@
+# Code landed on main: run CI again on the merged commit, build each image ONCE, push it
+# to DigitalOcean Container Registry as sha-<12>, then deploy that exact image to staging.
+# Production never rebuilds: promote.yml re-points production at the same image.
+name: Release (main -> staging)
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read # default for every job; jobs ask for more only when they need it
+
+# One staging release at a time, in commit order. Never cancel a half-finished deploy.
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    with:
+      image-checks: false # the build job below builds, smoke-tests and scans the real images
+
+  build:
+    name: Build and push images
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rekalled_smoke
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Image names and tag
+        id: meta
+        env:
+          REGISTRY: ${{ vars.REGISTRY }}
+          DO_REGISTRY_NAME: ${{ vars.DO_REGISTRY_NAME }}
+        run: |
+          : "${REGISTRY:?set repo variable REGISTRY}" "${DO_REGISTRY_NAME:?set repo variable DO_REGISTRY_NAME}"
+          {
+            echo "tag=sha-${GITHUB_SHA::12}"
+            echo "api=${REGISTRY}/${DO_REGISTRY_NAME}/rekalled-api"
+            echo "web=${REGISTRY}/${DO_REGISTRY_NAME}/rekalled-web"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ${{ vars.REGISTRY }}
+          username: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          password: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      # No build cache here: a release build never reads cache written by pull requests.
+      - name: Build and push API
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: apps/api
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.api }}:${{ steps.meta.outputs.tag }}
+          build-args: GIT_SHA=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+
+      - name: Build and push web
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: apps/web
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.web }}:${{ steps.meta.outputs.tag }}
+          build-args: GIT_SHA=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+
+      # Test what was pushed (pulled back by tag), not a local copy.
+      - name: Smoke test pushed images
+        env:
+          API_IMAGE: ${{ steps.meta.outputs.api }}:${{ steps.meta.outputs.tag }}
+          WEB_IMAGE: ${{ steps.meta.outputs.web }}:${{ steps.meta.outputs.tag }}
+        run: |
+          docker pull "$API_IMAGE" && docker pull "$WEB_IMAGE"
+          scripts/ci/smoke-images.sh "$API_IMAGE" "$WEB_IMAGE" "$GITHUB_SHA"
+
+      - name: Scan API image (Grype)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ steps.meta.outputs.api }}:${{ steps.meta.outputs.tag }}
+          fail-build: true
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
+
+      - name: Scan web image (Grype)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ steps.meta.outputs.web }}:${{ steps.meta.outputs.tag }}
+          fail-build: true
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
+
+  staging:
+    name: Deploy to staging
+    needs: build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      image-tag: ${{ needs.build.outputs.tag }}
+      expected-sha: ${{ github.sha }}
+
+  prune:
+    name: Prune old sha- tags (non-blocking)
+    needs: staging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          DO_REGISTRY_NAME: ${{ vars.DO_REGISTRY_NAME }}
+        run: |
+          scripts/deploy/prune-registry.sh rekalled-api 15
+          scripts/deploy/prune-registry.sh rekalled-web 15

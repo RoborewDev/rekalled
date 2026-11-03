@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Required, so a deploy that forgets it fails to start instead of running unauthenticated.
     auth_mode: Literal["dev", "logto"]
 
+    # Which commit this process was built from. The Dockerfile bakes it in as GIT_SHA, and
+    # /v1/health reports it so a deploy can prove the new image is the one serving traffic.
+    git_sha: str = "local"
+
     @model_validator(mode="after")
     def dev_auth_only_in_development(self) -> Self:
         # An allowlist, not "not production": an unexpected ENV must not switch auth off.

@@ -1,0 +1,6 @@
+# zizmor configuration (https://docs.zizmor.sh/configuration/).
+rules:
+  # GitHub's new `uses: $/...` self-repository syntax (July 2026) is preferred by zizmor,
+  # but actionlint 1.7.12 rejects it. Re-enable once actionlint supports it.
+  self-repository:
+    disable: true
