@@ -2,6 +2,9 @@
 
 Status: ready to implement at slice 02. Every file named here is included in this change.
 
+The step-by-step guide to releasing (merge → staging, tag → production, rollback) is in
+[`TAGS.md`](TAGS.md). This document is the design and the why; that one is the how.
+
 ## The flow in one picture
 
 ```text
@@ -33,6 +36,7 @@ This re-deploys the image that already exists. Nothing is rebuilt.
 ### 1. One branch, short-lived PRs
 
 The repo uses trunk-based development with a single long-lived branch, `main`.
+
 - Rename `master` to `main` in GitHub settings; GitHub redirects the old name.
 - Each worktree has its own branch. Open a PR to `main`, then squash-merge it.
 - `develop` and `staging` branches don't exist. Your previous projects used a branch per
@@ -66,6 +70,7 @@ The repo uses trunk-based development with a single long-lived branch, `main`.
 ### 4. Coolify "Docker Image" applications (not Compose, not Dockerfile)
 
 Coolify should pull a pre-built image. It should not build one.
+
 - Rolling updates only work for single-container applications, so Compose loses zero-downtime
   replacement ([Coolify rolling updates](https://coolify.io/docs/knowledge-base/rolling-updates)).
 - A repo-based compose file is read from `main` HEAD, not from the commit being promoted.
@@ -77,6 +82,7 @@ Coolify should pull a pre-built image. It should not build one.
 ### 5. Migrations run at API start, under a lock, and must be expand/contract
 
 `docker/start.sh` runs `alembic upgrade head`, then starts uvicorn.
+
 - `migrations/env.py` takes `pg_advisory_xact_lock`, so two containers starting at once can't
   both migrate. This was tested: of two concurrent runs, one applied both revisions and the
   other found nothing to do.
@@ -150,27 +156,27 @@ Coolify should pull a pre-built image. It should not build one.
 
 ## Files in this change and why each exists
 
-| File | Why |
-|---|---|
-| `.github/workflows/ci.yml` | Every PR gate. Also reused by `release.yml`, so merged code passes the same checks. `ci-ok` is the one required check. |
-| `.github/workflows/release.yml` | Main → build once → smoke test + scan the pushed image → staging. |
-| `.github/workflows/promote.yml` | Tag or manual → verify → retag → production → GitHub release. It is also the rollback path. |
-| `.github/workflows/deploy.yml` | One deploy implementation for both environments. Only the GitHub environment differs. |
-| `.github/zizmor.yml` | Disables one rule: the new `$/` self-repo syntax is rejected by actionlint 1.7.12. |
-| `.github/dependabot.yml` | Weekly grouped updates for actions, uv, npm and Docker base images. |
-| `.github/pull_request_template.md` | Reminds you of the migration and parity rules on every PR. |
-| `.coderabbit.yaml` | Review rules per path, linters, blocking pre-merge checks, auto-approve. Validated against the v2 schema. |
-| `apps/api/Dockerfile`, `.dockerignore` | uv multi-stage build, non-root user, `GIT_SHA` baked in, health check, Infisical CLI. |
-| `apps/api/docker/entrypoint.sh` | Chooses the secrets source (Infisical or plain env). |
-| `apps/api/docker/start.sh` | Runs migrations, then uvicorn with proxy headers for Traefik. |
-| `apps/api/migrations/env.py` | Advisory lock around migrations. |
-| `apps/api/app/core/config.py`, `api/v1/health.py`, `tests/test_health.py` | `/v1/health` now reports `git_sha`, so a deploy can prove the new commit is serving. Test-first, two tests. |
-| `apps/web/Dockerfile`, `.dockerignore` | pnpm build. The runtime ships only Nitro's self-contained `.output` (about 1.6 MB, no node_modules). |
-| `apps/web/vite.config.ts` | Excludes the generated `routeTree.gen.ts` from `vp fmt`. Without this, `vp check` fails in CI on a clean checkout. |
-| `scripts/ci/smoke-images.sh` | Starts both images as Coolify would: production settings, migrations, health, `/v1/me` = 401. |
-| `scripts/deploy/coolify-deploy.sh` | PATCH tag → POST deploy → poll the deployment → check health serves the expected SHA. |
-| `scripts/deploy/prune-registry.sh` | Keeps the newest 15 `sha-` tags per repo. Never touches `v*` tags. |
-| `justfile` | `just images` and `just smoke` reproduce CI locally. |
+| File                                                                      | Why                                                                                                                    |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`                                                | Every PR gate. Also reused by `release.yml`, so merged code passes the same checks. `ci-ok` is the one required check. |
+| `.github/workflows/release.yml`                                           | Main → build once → smoke test + scan the pushed image → staging.                                                      |
+| `.github/workflows/promote.yml`                                           | Tag or manual → verify → retag → production → GitHub release. It is also the rollback path.                            |
+| `.github/workflows/deploy.yml`                                            | One deploy implementation for both environments. Only the GitHub environment differs.                                  |
+| `.github/zizmor.yml`                                                      | Disables one rule: the new `$/` self-repo syntax is rejected by actionlint 1.7.12.                                     |
+| `.github/dependabot.yml`                                                  | Weekly grouped updates for actions, uv, npm and Docker base images.                                                    |
+| `.github/pull_request_template.md`                                        | Reminds you of the migration and parity rules on every PR.                                                             |
+| `.coderabbit.yaml`                                                        | Review rules per path, linters, blocking pre-merge checks, auto-approve. Validated against the v2 schema.              |
+| `apps/api/Dockerfile`, `.dockerignore`                                    | uv multi-stage build, non-root user, `GIT_SHA` baked in, health check, Infisical CLI.                                  |
+| `apps/api/docker/entrypoint.sh`                                           | Chooses the secrets source (Infisical or plain env).                                                                   |
+| `apps/api/docker/start.sh`                                                | Runs migrations, then uvicorn with proxy headers for Traefik.                                                          |
+| `apps/api/migrations/env.py`                                              | Advisory lock around migrations.                                                                                       |
+| `apps/api/app/core/config.py`, `api/v1/health.py`, `tests/test_health.py` | `/v1/health` now reports `git_sha`, so a deploy can prove the new commit is serving. Test-first, two tests.            |
+| `apps/web/Dockerfile`, `.dockerignore`                                    | pnpm build. The runtime ships only Nitro's self-contained `.output` (about 1.6 MB, no node_modules).                   |
+| `apps/web/vite.config.ts`                                                 | Excludes the generated `routeTree.gen.ts` from `vp fmt`. Without this, `vp check` fails in CI on a clean checkout.     |
+| `scripts/ci/smoke-images.sh`                                              | Starts both images as Coolify would: production settings, migrations, health, `/v1/me` = 401.                          |
+| `scripts/deploy/coolify-deploy.sh`                                        | PATCH tag → POST deploy → poll the deployment → check health serves the expected SHA.                                  |
+| `scripts/deploy/prune-registry.sh`                                        | Keeps the newest 15 `sha-` tags per repo. Never touches `v*` tags.                                                     |
+| `justfile`                                                                | `just images` and `just smoke` reproduce CI locally.                                                                   |
 
 ## One-time setup checklist
 
@@ -199,17 +205,17 @@ Coolify should pull a pre-built image. It should not build one.
      need a public repo or a paid plan, so treat that as optional.
 6. Settings → Secrets and variables → Actions:
 
-   | Scope | Name | Kind | Value |
-   |---|---|---|---|
-   | Repository | `DIGITALOCEAN_ACCESS_TOKEN` | secret | DO token scoped to the registry (read and write) |
-   | Repository | `REGISTRY` | variable | `registry.digitalocean.com` |
-   | Repository | `DO_REGISTRY_NAME` | variable | your registry name |
-   | staging and production | `COOLIFY_TOKEN` | secret | Coolify API token with deploy and write |
-   | staging and production | `COOLIFY_BASE_URL` | variable | `https://coolify.example.com` |
-   | staging and production | `COOLIFY_API_UUID` | variable | UUID of that environment's API app |
-   | staging and production | `COOLIFY_WEB_UUID` | variable | UUID of that environment's web app |
-   | staging and production | `API_HEALTH_URL` | variable | `https://api.staging.example.com/v1/health` |
-   | staging and production | `WEB_URL` | variable | `https://staging.example.com` |
+   | Scope                  | Name                        | Kind     | Value                                            |
+   | ---------------------- | --------------------------- | -------- | ------------------------------------------------ |
+   | Repository             | `DIGITALOCEAN_ACCESS_TOKEN` | secret   | DO token scoped to the registry (read and write) |
+   | Repository             | `REGISTRY`                  | variable | `registry.digitalocean.com`                      |
+   | Repository             | `DO_REGISTRY_NAME`          | variable | your registry name                               |
+   | staging and production | `COOLIFY_TOKEN`             | secret   | Coolify API token with deploy and write          |
+   | staging and production | `COOLIFY_BASE_URL`          | variable | `https://coolify.example.com`                    |
+   | staging and production | `COOLIFY_API_UUID`          | variable | UUID of that environment's API app               |
+   | staging and production | `COOLIFY_WEB_UUID`          | variable | UUID of that environment's web app               |
+   | staging and production | `API_HEALTH_URL`            | variable | `https://api.staging.example.com/v1/health`      |
+   | staging and production | `WEB_URL`                   | variable | `https://staging.example.com`                    |
 
 7. Install CodeRabbit on the repo. `.coderabbit.yaml` in the repo root configures it.
 
@@ -268,6 +274,8 @@ Coolify should pull a pre-built image. It should not build one.
 
 ## Day-to-day
 
+Commands for each of these are in [`TAGS.md`](TAGS.md).
+
 - Feature work:
   1. `git worktree add ../rekalled-s03 -b s03-decks origin/main`
   2. Commit test-first, push, open a PR.
@@ -285,6 +293,7 @@ Coolify should pull a pre-built image. It should not build one.
 ## Verified here, and what wasn't
 
 Verified in the sandbox:
+
 - API gates are green (ruff, ruff format, mypy, 14 pytest tests).
 - `alembic check` reports no drift.
 - The concurrent-migration lock works.
@@ -301,6 +310,7 @@ Verified in the sandbox:
 - `.coderabbit.yaml` and `dependabot.yml` validate against their JSON schemas.
 
 Not verified (no Docker or real accounts here):
+
 - the actual `docker build` of both images;
 - registry push and retag;
 - Coolify API calls against a real instance;
