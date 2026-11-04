@@ -20,10 +20,14 @@ alive() {
 cleanup() {
   local status="${1:-$?}"
   trap - EXIT INT TERM
-  [[ -n "$api_pid" ]] && kill "$api_pid" 2>/dev/null || true
-  [[ -n "$web_pid" ]] && kill "$web_pid" 2>/dev/null || true
-  [[ -n "$api_pid" ]] && wait "$api_pid" 2>/dev/null || true
-  [[ -n "$web_pid" ]] && wait "$web_pid" 2>/dev/null || true
+  if [[ -n "$api_pid" ]]; then
+    kill "$api_pid" 2>/dev/null || true
+    wait "$api_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$web_pid" ]]; then
+    kill "$web_pid" 2>/dev/null || true
+    wait "$web_pid" 2>/dev/null || true
+  fi
   exit "$status"
 }
 trap cleanup EXIT
