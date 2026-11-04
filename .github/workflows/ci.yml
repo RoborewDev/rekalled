@@ -36,12 +36,13 @@ jobs:
           persist-credentials: false
 
       # .gitattributes forces LF for the fragile file types (shell, Dockerfile, justfile);
-      # this catches CRLF committed in anything else. Fix with: git add --renormalize .
+      # this catches CRLF or mixed line endings committed in anything else.
+      # Fix with: git add --renormalize .
       - name: line endings (LF only)
         run: |
-          crlf="$(git ls-files --eol | awk '$1=="i/crlf" || $2=="w/crlf"')"
+          crlf="$(git ls-files --eol | awk '$1=="i/crlf" || $1=="i/mixed" || $2=="w/crlf" || $2=="w/mixed"')"
           if [ -n "$crlf" ]; then
-            printf '::error::CRLF line endings found in tracked files\n%s\n' "$crlf"
+            printf '::error::CRLF or mixed line endings found in tracked files\n%s\n' "$crlf"
             exit 1
           fi
 
