@@ -27,6 +27,10 @@ class QuotaExceededError(DomainError):
     status_code: int = 429
 
 
+class ServiceUnavailableError(DomainError):
+    status_code: int = 503
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(DomainError)
     async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:

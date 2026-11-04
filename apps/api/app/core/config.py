@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import ClassVar, Literal, Self
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -29,10 +29,11 @@ class Settings(BaseSettings):
 
     # Card generation. "fake" needs no API key: handy for frontend work and E2E.
     card_generator: Literal["ai", "fake"] = "ai"
-    max_source_chars: int = 20_000
-    max_cards: int = 20
+    # SourceCreate rejects text above 200k, so a larger limit here would have no effect.
+    max_source_chars: int = Field(default=20_000, gt=0, le=200_000)
+    max_cards: int = Field(default=20, gt=0, le=1_000)
     # Every Source spends model credit, so cap how many one user can add per 24 hours.
-    max_sources_per_day: int = 50
+    max_sources_per_day: int = Field(default=50, gt=0)
 
     # Which commit this process was built from. The Dockerfile bakes it in as GIT_SHA, and
     # /v1/health reports it so a deploy can prove the new image is the one serving traffic.

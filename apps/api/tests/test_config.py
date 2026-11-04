@@ -85,6 +85,32 @@ def test_settings_errors_do_not_echo_secrets(monkeypatch: pytest.MonkeyPatch) ->
     assert "S3cretPW" not in str(exc.value)
 
 
+def test_generation_settings_have_safe_defaults() -> None:
+    settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+
+    assert settings.card_generator == "ai"
+    assert settings.max_source_chars == 20_000
+    assert settings.max_cards == 20
+    assert settings.max_sources_per_day == 50
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("max_source_chars", 0),
+        ("max_source_chars", 200_001),
+        ("max_cards", 0),
+        ("max_cards", 1_001),
+        ("max_sources_per_day", 0),
+    ],
+)
+def test_generation_settings_reject_unsafe_values(setting: str, value: int) -> None:
+    with pytest.raises(ValidationError):
+        _ = Settings.model_validate(
+            {"database_url": SECRET_URL, "auth_mode": "dev", setting: value}
+        )
+
+
 @pytest.mark.parametrize(
     ("given", "expected"),
     [

@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import (
@@ -16,6 +16,13 @@ from app.models import Card, Source, User
 from app.services.decks import get_deck
 
 logger = logging.getLogger(__name__)
+
+
+async def _lock(session: AsyncSession, key: str) -> None:
+    """Serialise work for one user/source; Postgres releases the lock at transaction end."""
+    _ = await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": key}
+    )
 
 
 async def create_source_and_generate(
@@ -46,6 +53,8 @@ async def create_source_and_generate(
 
 
 async def check_daily_quota(session: AsyncSession, user: User, max_per_day: int) -> None:
+    # The count and the insert below must be atomic, or parallel requests can both pass.
+    await _lock(session, f"user:{user.id}")
     added_today = await session.scalar(
         select(func.count())
         .select_from(Source)
@@ -64,6 +73,8 @@ async def regenerate(
     max_cards: int,
 ) -> Source:
     source = await get_source(session, user, source_id)
+    # Hold the source lock across the emptiness check and the insert.
+    await _lock(session, f"source:{source.id}")
     if not await list_source_cards(session, source):
         await _generate_drafts(session, source, generator, max_cards=max_cards)
     return source
@@ -80,7 +91,9 @@ async def get_source(session: AsyncSession, user: User, source_id: uuid.UUID) ->
 
 async def list_source_cards(session: AsyncSession, source: Source) -> list[Card]:
     result = await session.scalars(
-        select(Card).where(Card.source_id == source.id).order_by(Card.position)
+        select(Card)
+        .where(Card.source_id == source.id, Card.owner_id == source.owner_id)
+        .order_by(Card.position, Card.created_at, Card.id)
     )
     return list(result)
 
@@ -88,6 +101,7 @@ async def list_source_cards(session: AsyncSession, source: Source) -> list[Card]
 async def _generate_drafts(
     session: AsyncSession, source: Source, generator: CardGenerator, *, max_cards: int
 ) -> None:
+    await _lock(session, f"source:{source.id}")
     try:
         drafts = await generator.generate(source.content, max_cards=max_cards)
     except GenerationError as exc:
