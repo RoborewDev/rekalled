@@ -35,6 +35,16 @@ jobs:
         with:
           persist-credentials: false
 
+      # .gitattributes forces LF for the fragile file types (shell, Dockerfile, justfile);
+      # this catches CRLF committed in anything else. Fix with: git add --renormalize .
+      - name: line endings (LF only)
+        run: |
+          crlf="$(git ls-files --eol | awk '$1=="i/crlf" || $2=="w/crlf"')"
+          if [ -n "$crlf" ]; then
+            printf '::error::CRLF line endings found in tracked files\n%s\n' "$crlf"
+            exit 1
+          fi
+
       - name: actionlint
         env:
           ACTIONLINT_VERSION: "1.7.12"

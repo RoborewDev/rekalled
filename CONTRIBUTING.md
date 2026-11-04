@@ -47,6 +47,7 @@ The smoke test needs a throwaway database; see the `justfile`.
 - When a generated API client is present, regenerate it with API contract changes.
 - Discuss new dependencies before adding them.
 - Keep Actions pinned and permissions minimal. Pass untrusted workflow input through environment variables, not directly into shell scripts.
+- The repo is LF-only: `.gitattributes` forces LF for scripts, Dockerfiles and the justfile, and CI fails on CRLF in any tracked file. Don't set `core.autocrlf=true` (it rewrote the worktree to CRLF once and broke the deploy scripts).
 
 See [Deployment setup](docs/deployment/PLAN.md) for deployment configuration and [Releases and rollback](docs/deployment/TAGS.md) for release commands.
 

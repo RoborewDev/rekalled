@@ -19,14 +19,14 @@ The workflows are in `.github/workflows/`: `ci.yml`, `release.yml`, `promote.yml
 4. Create the `staging` and `production` environments. Allow production deployments from `v*` tags and `main` for manual rollbacks. Add approval rules if supported and useful.
 5. Add the settings below.
 
-| Scope | Name | Type |
-| --- | --- | --- |
-| Repository | `COOLIFY_TOKEN` | Secret |
-| Repository | `COOLIFY_BASE_URL` | Variable |
+| Scope            | Name               | Type     |
+| ---------------- | ------------------ | -------- |
+| Repository       | `COOLIFY_TOKEN`    | Secret   |
+| Repository       | `COOLIFY_BASE_URL` | Variable |
 | Each environment | `COOLIFY_API_UUID` | Variable |
 | Each environment | `COOLIFY_WEB_UUID` | Variable |
-| Each environment | `API_HEALTH_URL` | Variable |
-| Each environment | `WEB_URL` | Variable |
+| Each environment | `API_HEALTH_URL`   | Variable |
+| Each environment | `WEB_URL`          | Variable |
 
 Use the same variable names in both environments, with the matching app UUIDs and URLs. `API_HEALTH_URL` ends in `/v1/health`.
 
@@ -53,14 +53,14 @@ The registry login is shared by apps on that server. Do not put the PAT in appli
 
 Create API and web Docker Image applications in both `staging` and `production`. Reuse existing applications if they are already configured.
 
-| Setting | API | Web |
-| --- | --- | --- |
-| Image | `ghcr.io/roborewdev/rekalled-api` | `ghcr.io/roborewdev/rekalled-web` |
-| Port | `8000` | `3000` |
-| Health check type | CMD | CMD |
-| Health check command | `python /app/docker/healthcheck.py` | `node /app/healthcheck.mjs` |
-| Interval / timeout / retries | 10s / 5s / 3 | 10s / 5s / 3 |
-| Start period | 60s | 20s |
+| Setting                      | API                                 | Web                               |
+| ---------------------------- | ----------------------------------- | --------------------------------- |
+| Image                        | `ghcr.io/roborewdev/rekalled-api`   | `ghcr.io/roborewdev/rekalled-web` |
+| Port                         | `8000`                              | `3000`                            |
+| Health check type            | CMD                                 | CMD                               |
+| Health check command         | `python /app/docker/healthcheck.py` | `node /app/healthcheck.mjs`       |
+| Interval / timeout / retries | 10s / 5s / 3                        | 10s / 5s / 3                      |
+| Start period                 | 60s                                 | 20s                               |
 
 - Set each app's domain and configure DNS and HTTPS.
 - Leave the image tag separate from the image name. Actions sets it before deploying.
@@ -84,7 +84,7 @@ INFISICAL_CLIENT_SECRET
 
 Keep credentials runtime-only, not build-time. The API image uses the Infisical CLI to load settings when it starts.
 
-`INFISICAL_ENV` is the Infisical environment slug for that app: `staging` on staging and `prod` on production. Never use `dev`. Its `DATABASE_URL` points at the docker-compose Postgres on localhost. `infisical run` exports its values last, so they override anything set in Coolify. The entrypoint therefore refuses `dev`, `development` and `local` and stops the container with a clear error. It also stops when the bootstrap variables are only partly set, or when login fails. Its first log line, `[entrypoint] secrets: infisical (project=… env=… domain=…)`, shows which environment loaded. The `INFISICAL_UNIVERSAL_AUTH_CLIENT_ID`/`_SECRET` and `INFISICAL_DOMAIN` aliases from `scripts/env-pull.sh` are also accepted.
+`INFISICAL_ENV` is the Infisical environment slug for that app: `staging` on staging and `prod` on production. Never use `dev`. Its `DATABASE_URL` points at the docker-compose Postgres on localhost. `infisical run` injects its values into the command's environment, overriding anything set in Coolify. The entrypoint therefore refuses `dev`, `development` and `local` and stops the container with a clear error. It also stops when the bootstrap variables are only partly set, or when login fails. Its first log line, `[entrypoint] secrets: infisical (project=… env=… domain=…)`, shows which environment loaded. The `INFISICAL_UNIVERSAL_AUTH_CLIENT_ID`/`_SECRET` and `INFISICAL_DOMAIN` aliases from `scripts/env-pull.sh` are also accepted.
 
 `DATABASE_URL` may be pasted as the provider gives it, such as `postgresql://…?sslmode=require` from DigitalOcean. Settings rewrites it for asyncpg as `postgresql+asyncpg://…?ssl=require`.
 

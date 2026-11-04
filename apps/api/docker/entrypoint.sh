@@ -7,8 +7,9 @@
 # environment variables through Settings, so it never knows which source was used.
 #
 # Coolify holds only the bootstrap variables; DATABASE_URL and friends live in Infisical.
-# `infisical run` exports its secrets last, so the Infisical environment chosen by
-# INFISICAL_ENV wins over anything Coolify sets. That is why a wrong slug is refused here.
+# `infisical run` injects its secrets into the command's environment, overriding anything
+# Coolify set, so the Infisical environment chosen by INFISICAL_ENV wins. That is why a
+# wrong slug is refused here.
 set -eu
 
 log() { echo "[entrypoint] $*" >&2; }
@@ -48,7 +49,7 @@ esac
 
 domain="${INFISICAL_API_URL:-${INFISICAL_DOMAIN:-https://app.infisical.com/api}}"
 export INFISICAL_DISABLE_UPDATE_CHECK=true
-# The app must never see the long-lived machine identity, under either name.
+# The app must never see the long-lived machine identity, whichever alias set it.
 unset INFISICAL_CLIENT_ID INFISICAL_CLIENT_SECRET \
   INFISICAL_UNIVERSAL_AUTH_CLIENT_ID INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
 
