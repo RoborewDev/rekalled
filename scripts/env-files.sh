@@ -12,7 +12,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-if [[ -f .env && -f .env.local ]]; then
+has_secrets() {
+  [[ -f "$1" ]] && grep -qE '^[A-Za-z_][A-Za-z0-9_]*=' "$1"
+}
+
+if [[ -f .env ]] && has_secrets .env.local; then
   exit 0
 fi
 
@@ -28,8 +32,8 @@ if [[ ! -f .env ]]; then
   echo "Copied .env from $main"
 fi
 
-if [[ ! -f .env.local ]]; then
-  if [[ -f "$main/.env.local" ]]; then
+if ! has_secrets .env.local; then
+  if [[ "$main" != "$REPO_ROOT" ]] && has_secrets "$main/.env.local"; then
     cp "$main/.env.local" .env.local
     chmod 600 .env.local
     echo "Copied .env.local from $main"
