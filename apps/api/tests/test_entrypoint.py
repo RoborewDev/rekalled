@@ -84,6 +84,7 @@ def test_with_infisical_it_wraps_the_command_in_infisical_run(entrypoint):
     assert "--domain=https://infisical.example.test" in login
     assert "--projectId=proj-123" in run
     assert "--env=staging" in run
+    assert "--token=fake-token" in run
     assert "env=staging" in result.stderr
 
 
@@ -94,6 +95,14 @@ def test_the_app_never_sees_the_long_lived_client_credentials(entrypoint):
     assert "S3cretClient" not in result.stdout
     assert "INFISICAL_CLIENT_ID" not in result.stdout
     assert "S3cretClient" not in result.stderr
+
+
+def test_the_app_never_sees_the_access_token(entrypoint):
+    result = entrypoint.run(BOOTSTRAP)
+
+    assert result.returncode == 0, result.stderr
+    assert "INFISICAL_TOKEN" not in result.stdout
+    assert "fake-token" not in result.stdout
 
 
 def test_partial_infisical_config_fails_instead_of_falling_back(entrypoint):

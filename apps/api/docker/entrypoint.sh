@@ -60,9 +60,8 @@ if ! token="$(infisical login --method=universal-auth \
   fail "Infisical login failed (domain=${domain})"
 fi
 unset client_id client_secret
-INFISICAL_TOKEN="${token}"
-export INFISICAL_TOKEN
 
 log "secrets: infisical (project=${project_id} env=${env_slug} domain=${domain})"
-exec infisical run --projectId="${project_id}" --env="${env_slug}" \
+# --token, not an exported INFISICAL_TOKEN: the app must never inherit the token.
+exec infisical run --token="${token}" --projectId="${project_id}" --env="${env_slug}" \
   --domain="${domain}" --silent -- "$@"
