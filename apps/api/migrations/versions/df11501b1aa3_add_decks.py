@@ -38,8 +38,13 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["owner_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name="decks_owner_id_fkey",
+        ),
+        sa.PrimaryKeyConstraint("id", name="decks_pkey"),
     )
     op.create_index(op.f("ix_decks_owner_id"), "decks", ["owner_id"], unique=False)
     # ### end Alembic commands ###
