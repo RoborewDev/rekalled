@@ -1,8 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Self
+from typing import ClassVar, Literal, Self
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -16,7 +16,9 @@ ENV_FILES = (API_DIR.parent.parent / ".env", API_DIR / ".env", API_DIR.parent.pa
 
 class Settings(BaseSettings):
     # hide_input_in_errors: a failed check must not print the raw input (DB URL, API keys).
-    model_config = SettingsConfigDict(env_file=ENV_FILES, extra="ignore", hide_input_in_errors=True)
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+        env_file=ENV_FILES, extra="ignore", hide_input_in_errors=True
+    )
 
     env: Literal["development", "test", "production"] = "development"
     database_url: SecretStr  # required, read from DATABASE_URL; masked in repr and logs
@@ -24,6 +26,14 @@ class Settings(BaseSettings):
     # "dev" = no tokens, a fixed local user. "logto" = validate Logto access tokens.
     # Required, so a deploy that forgets it fails to start instead of running unauthenticated.
     auth_mode: Literal["dev", "logto"]
+
+    # Card generation. "fake" needs no API key: handy for frontend work and E2E.
+    card_generator: Literal["ai", "fake"] = "ai"
+    # SourceCreate rejects text above 200k, so a larger limit here would have no effect.
+    max_source_chars: int = Field(default=20_000, gt=0, le=200_000)
+    max_cards: int = Field(default=20, gt=0, le=1_000)
+    # Every Source spends model credit, so cap how many one user can add per 24 hours.
+    max_sources_per_day: int = Field(default=50, gt=0)
 
     # Which commit this process was built from. The Dockerfile bakes it in as GIT_SHA, and
     # /v1/health reports it so a deploy can prove the new image is the one serving traffic.

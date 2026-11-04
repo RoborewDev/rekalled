@@ -30,13 +30,6 @@ if [[ ! -f "$BOOTSTRAP_ENV_FILE" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$SECRETS_ENV_FILE" ]]; then
-  cat > "$SECRETS_ENV_FILE" <<'EOF'
-# Pulled from Infisical via bash scripts/env-pull.sh — do not commit.
-# Keep Infisical bootstrap vars in .env.
-EOF
-fi
-
 set -a
 # shellcheck disable=SC1090
 source "$BOOTSTRAP_ENV_FILE"
@@ -59,11 +52,16 @@ if [[ -z "$client_id" || -z "$client_secret" ]]; then
 fi
 
 raw_export="$(mktemp)"
+existing_secrets="$(mktemp)"
 merged_sorted="$(mktemp)"
 merged_file="$(mktemp)"
 pulled_keys="$(mktemp)"
 bootstrap_clean="$(mktemp)"
-trap 'rm -f "$raw_export" "$merged_sorted" "$merged_file" "$pulled_keys" "$bootstrap_clean"' EXIT
+trap 'rm -f "$raw_export" "$existing_secrets" "$merged_sorted" "$merged_file" "$pulled_keys" "$bootstrap_clean"' EXIT
+
+if [[ -f "$SECRETS_ENV_FILE" ]]; then
+  cp "$SECRETS_ENV_FILE" "$existing_secrets"
+fi
 
 echo "Pulling Infisical secrets (env=$env_slug) into $SECRETS_ENV_FILE"
 token="$(
@@ -134,7 +132,7 @@ END {
   for (key in incoming) merged[key] = incoming[key]
   for (key in merged) print merged[key]
 }
-' "$raw_export" "$SECRETS_ENV_FILE" | LC_ALL=C sort > "$merged_sorted"
+' "$raw_export" "$existing_secrets" | LC_ALL=C sort > "$merged_sorted"
 
 {
   cat <<EOF
@@ -170,7 +168,7 @@ awk -v keys="$pulled_keys" '
 mv "$bootstrap_clean" "$BOOTSTRAP_ENV_FILE"
 
 trap - EXIT
-rm -f "$raw_export" "$merged_sorted" "$pulled_keys"
+rm -f "$raw_export" "$existing_secrets" "$merged_sorted" "$pulled_keys"
 
 echo "Merged Infisical secrets into $SECRETS_ENV_FILE"
 echo "Bootstrap vars stay in $BOOTSTRAP_ENV_FILE; skipped: INFISICAL_* (and empty Infisical values)"

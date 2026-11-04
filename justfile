@@ -1,26 +1,48 @@
 set dotenv-load
 
-# Start Postgres (pgvector) in the background
-db:
-    docker compose up -d --wait db
+# Make sure .env and .env.local exist: copied from the main checkout when run in
+# a worktree, otherwise pulled from Infisical. No-ops when both files are present.
+env-files:
+    bash scripts/env-files.sh
+
+# Install/refresh both apps' dependencies (creates apps/api/.venv, apps/web/node_modules)
+install:
+    cd apps/api && uv sync
+    cd apps/web && pnpm install
+
+# Start Postgres (pgvector) in the background. Compose reads .env by default only;
+# .env.local must be passed explicitly — that is where env-pull.sh keeps POSTGRES_*.
+db: env-files
+    docker compose --env-file .env --env-file .env.local up -d --wait db
 
 # Run the API with reload on http://localhost:8000
-api:
+api: env-files
     cd apps/api && uv run fastapi dev --port 8000
 
 # Run the web app on http://localhost:3000
 web:
     cd apps/web && vp dev --port 3000
 
-migrate:
+# Run the API and the web app together; Ctrl-C stops both
+dev: env-files
+    bash scripts/dev.sh
+
+migrate: env-files
     cd apps/api && uv run alembic upgrade head
 
-# Create a migration from model changes: just revision "add decks"
-revision message:
-    cd apps/api && uv run alembic revision --autogenerate -m "{{message}}"
+# Fresh worktree, one command: env files, deps, db, migrations, then both apps.
+# Every step is idempotent, so re-running picks up where it left off.
+start: install db migrate dev
 
-test-api *args:
-    cd apps/api && uv run pytest {{args}}
+import-env:
+    ./scripts/env-pull.sh
+
+# Create a migration from model changes: just revision "add decks"
+revision message: env-files
+    cd apps/api && uv run alembic revision --autogenerate -m "{{ message }}"
+
+test-api *args: env-files
+    cd apps/api && uv run pytest {{ args }}
 
 test-web:
     cd apps/web && vp test
@@ -36,8 +58,7 @@ images:
     docker build -t rekalled-api:local --build-arg GIT_SHA=$(git rev-parse HEAD) apps/api
     docker build -t rekalled-web:local --build-arg GIT_SHA=$(git rev-parse HEAD) apps/web
 
-# Run the CI smoke test against locally built images. Uses a throwaway database:
-# create it first, e.g. `docker compose exec db createdb -U postgres rekalled_smoke`
-smoke: images
-    SMOKE_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT}/rekalled_smoke \
-    scripts/ci/smoke-images.sh rekalled-api:local rekalled-web:local $(git rev-parse HEAD)
+# Run the CI smoke test against locally built images (see scripts/ci/smoke-local.sh
+# for the throwaway-database prerequisite)
+smoke: images env-files
+    bash scripts/ci/smoke-local.sh

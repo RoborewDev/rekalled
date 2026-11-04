@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
+from fastapi.params import Depends as DependsParam
 
 from app.api.deps import SessionDep, SettingsDep
 from app.auth.dev import dev_principal
@@ -27,9 +28,9 @@ async def get_current_user(principal: PrincipalDep, session: SessionDep) -> User
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-def require_scope(scope: str):
+def require_scope(scope: str) -> DependsParam:
     async def check(principal: PrincipalDep) -> None:
         if scope not in principal.scopes:
             raise HTTPException(status.HTTP_403_FORBIDDEN, f"Missing scope: {scope}")
 
-    return Depends(check)
+    return DependsParam(check)

@@ -8,6 +8,16 @@ commands. Standard library only, so the slim runtime image needs no curl or wget
 import os
 import sys
 import urllib.request
+from typing import Protocol, Self, cast
+
+
+class _Response(Protocol):
+    status: int
+
+    def __enter__(self) -> Self: ...
+
+    def __exit__(self, *args: object) -> bool | None: ...
+
 
 # Same rule as start.sh's ${PORT:-8000}: an empty PORT counts as unset.
 port = os.environ.get("PORT") or "8000"
@@ -16,7 +26,7 @@ url = f"http://127.0.0.1:{port}/v1/health"
 # the local probe through a proxy.
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 try:
-    with opener.open(url, timeout=4) as response:  # noqa: S310 (fixed local URL)
+    with cast(_Response, opener.open(url, timeout=4)) as response:  # noqa: S310 (fixed local URL)
         sys.exit(0 if response.status == 200 else 1)
 except Exception:  # noqa: BLE001 (any failure means unhealthy)
     sys.exit(1)

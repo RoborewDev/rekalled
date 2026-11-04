@@ -1,0 +1,101 @@
+"""add sources and cards
+
+Revision ID: da1991ed8720
+Revises: df11501b1aa3
+Create Date: 2026-11-04 17:26:45.229752
+
+"""
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from alembic import op
+
+# revision identifiers, used by Alembic.
+revision: str = "da1991ed8720"
+down_revision: str | Sequence[str] | None = "df11501b1aa3"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    _ = op.create_table(
+        "sources",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("owner_id", sa.Uuid(), nullable=False),
+        sa.Column("deck_id", sa.Uuid(), nullable=False),
+        sa.Column("kind", sa.String(length=16), nullable=False),
+        sa.Column("title", sa.String(length=200), nullable=True),
+        sa.Column("content", sa.Text(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["deck_id"], ["decks.id"], name="fk_sources_deck_id_decks", ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["owner_id"], ["users.id"], name="fk_sources_owner_id_users", ondelete="CASCADE"
+        ),
+        sa.PrimaryKeyConstraint("id", name="pk_sources"),
+    )
+    op.create_index(op.f("ix_sources_deck_id"), "sources", ["deck_id"], unique=False)
+    op.create_index(op.f("ix_sources_owner_id"), "sources", ["owner_id"], unique=False)
+    _ = op.create_table(
+        "cards",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("owner_id", sa.Uuid(), nullable=False),
+        sa.Column("deck_id", sa.Uuid(), nullable=False),
+        sa.Column("source_id", sa.Uuid(), nullable=True),
+        sa.Column("card_type", sa.String(length=16), nullable=False),
+        sa.Column("status", sa.String(length=16), nullable=False),
+        sa.Column("position", sa.SmallInteger(), nullable=False),
+        sa.Column("question", sa.Text(), nullable=False),
+        sa.Column("answer", sa.Text(), nullable=False),
+        sa.Column("source_excerpt", sa.Text(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["deck_id"], ["decks.id"], name="fk_cards_deck_id_decks", ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["owner_id"], ["users.id"], name="fk_cards_owner_id_users", ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["source_id"], ["sources.id"], name="fk_cards_source_id_sources", ondelete="SET NULL"
+        ),
+        sa.PrimaryKeyConstraint("id", name="pk_cards"),
+    )
+    op.create_index(op.f("ix_cards_deck_id"), "cards", ["deck_id"], unique=False)
+    op.create_index(op.f("ix_cards_owner_id"), "cards", ["owner_id"], unique=False)
+    op.create_index(op.f("ix_cards_source_id"), "cards", ["source_id"], unique=False)
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    op.drop_index(op.f("ix_cards_source_id"), table_name="cards")
+    op.drop_index(op.f("ix_cards_owner_id"), table_name="cards")
+    op.drop_index(op.f("ix_cards_deck_id"), table_name="cards")
+    op.drop_table("cards")
+    op.drop_index(op.f("ix_sources_owner_id"), table_name="sources")
+    op.drop_index(op.f("ix_sources_deck_id"), table_name="sources")
+    op.drop_table("sources")
