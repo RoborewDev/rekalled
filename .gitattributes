@@ -1,0 +1,12 @@
+# Line-ending policy: this repo is LF-only.
+#
+# A contributor's core.autocrlf=true (a Windows-oriented setting) once rewrote every
+# checked-out text file to CRLF in the worktree. Bash, sh, just and Docker treat the
+# carriage return as a literal character, which broke the deploy scripts. These rules
+# force LF in index and worktree no matter what the client's core.autocrlf says.
+# CI additionally fails if any CRLF sneaks into a commit (see ci.yml repo-lint).
+*.sh         text eol=lf
+*.bash       text eol=lf
+Dockerfile   text eol=lf
+*.dockerfile text eol=lf
+justfile     text eol=lf

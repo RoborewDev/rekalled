@@ -2,8 +2,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import SecretStr, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 API_DIR = Path(__file__).resolve().parents[2]  # apps/api
 # Repo-root .env first, then an optional apps/api/.env, then the root .env.local written by
@@ -26,6 +28,25 @@ class Settings(BaseSettings):
     # Which commit this process was built from. The Dockerfile bakes it in as GIT_SHA, and
     # /v1/health reports it so a deploy can prove the new image is the one serving traffic.
     git_sha: str = "local"
+
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def use_asyncpg_driver(cls, value: SecretStr) -> SecretStr:
+        # Managed Postgres hands out libpq-style URLs (postgresql://...?sslmode=require).
+        # The app talks to Postgres through asyncpg, which needs the +asyncpg driver and
+        # rejects sslmode as an unknown connect() argument; its equivalent is ssl.
+        try:
+            url = make_url(value.get_secret_value())
+        except ArgumentError:
+            raise ValueError("DATABASE_URL is not a valid database URL") from None
+        if url.drivername in ("postgres", "postgresql"):
+            url = url.set(drivername="postgresql+asyncpg")
+        if url.drivername == "postgresql+asyncpg" and "sslmode" in url.query:
+            sslmode = url.query["sslmode"]
+            if isinstance(sslmode, tuple):  # ?sslmode=a&sslmode=b: libpq uses the last one
+                sslmode = sslmode[-1]
+            url = url.difference_update_query(["sslmode"]).update_query_dict({"ssl": sslmode})
+        return SecretStr(url.render_as_string(hide_password=False))
 
     @model_validator(mode="after")
     def dev_auth_only_in_development(self) -> Self:
