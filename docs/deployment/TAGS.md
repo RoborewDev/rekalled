@@ -1,67 +1,35 @@
-# Rekalled — Releases and tags
+# Releases and rollback
 
-How code gets from a merge to production. The rule in one line: **only production uses version tags. Staging deploys every time code lands on `main`.**
+Staging deploys from `main`; production deploys from version tags. Both use the same GHCR images, with no rebuild between environments.
 
-- Staging is automatic. There is nothing to tag by hand, and staging always runs the latest `main`.
-- Production is a human decision, expressed as a `vX.Y.Z` git tag on a commit that staging has already run.
+## Deploy staging
 
-The workflows behind this are `.github/workflows/release.yml` (merge → build once → staging) and `.github/workflows/promote.yml` (tag → verify → production). The full CI/CD design, including why, is in [`PLAN.md`](PLAN.md).
+1. Open a PR to `main` and wait for the required checks.
+2. Squash-merge it.
+3. Wait for the Release workflow to finish, then check staging.
 
-## Staging: merge to main
+The images use `sha-<first 12 characters of the commit>`. No staging tag needs to be created manually.
 
-1. Open a PR from your worktree branch to `main`.
-2. Once `ci-ok` and CodeRabbit pass, squash-merge it.
-3. The release workflow builds both images once, tags them `sha-<first 12 of commit>` (for example `sha-3f9c2a1b7d04`), and deploys that tag to staging.
+## Deploy production
 
-There's nothing to tag by hand, and staging always runs the latest `main`.
+Choose a new version and tag the commit that passed staging:
 
-## Production: push a version tag
+```sh
+git fetch origin
+git tag -a v0.1.0 -m "Initial release" origin/main
+git push origin v0.1.0
+```
 
-1. Check that staging looks right. The commit you tag must already be deployed to staging successfully, or the workflow refuses.
-2. Tag that commit and push the tag:
+Replace the version and message as needed. If `main` has moved since the staging run, tag the tested commit SHA instead.
 
-   ```bash
-   git fetch origin
-   git tag -a v0.3.0 -m "Decks and cards" origin/main
-   git push origin v0.3.0
-   ```
+The Promote workflow checks the commit, adds the version tag to the existing images, verifies the digests match, deploys production and creates release notes. Check production health when it finishes.
 
-3. The promote workflow then:
-   - checks the tag matches `vMAJOR.MINOR.PATCH` and the commit is on `main`;
-   - checks that commit's staging release run succeeded (a re-run counts as its latest attempt);
-   - adds `v0.3.0` as a second tag on the existing `sha-…` images, with no rebuild and the same digest;
-   - deploys `v0.3.0` to production, API first, then web;
-   - creates a GitHub release with generated notes.
+Use `vMAJOR.MINOR.PATCH`; prerelease tags such as `v0.1.0-rc.1` do not trigger deployment. Never move or reuse an existing release tag.
 
-To release an older commit that's still on `main`, tag that SHA instead of `origin/main`. Its staging deployment must have succeeded.
+## Roll back
 
-## Rollback
+Open Actions → Promote (tag -> production) → Run workflow. Select `main` and enter an earlier release version.
 
-You don't push a new tag. Go to Actions → "Promote (tag -> production)" → Run workflow, and enter an earlier version such as `v0.2.1`. It redeploys that existing image without rebuilding.
+Both images for that version must still exist in GHCR. The workflow redeploys them without rebuilding; database changes must remain backward compatible. The first production release has no earlier application release to restore.
 
-## Version numbers
-
-Use semantic versioning:
-
-- **Patch** (`v0.3.1`): fixes.
-- **Minor** (`v0.4.0`): new features.
-- **Major** (`v1.0.0`): breaking changes, or the first public release.
-
-Tags like `v1.0.0-rc.1` don't trigger a deploy — the workflow only matches `v[0-9]+.[0-9]+.[0-9]+`.
-
-## Rules that protect tags
-
-The setup checklist in [`PLAN.md`](PLAN.md#one-time-setup-checklist) creates a tag ruleset so only admins can create `v*` tags, and nobody can move or delete them. If a release is bad, ship a new patch version or roll back. Never re-point an existing tag.
-
-## In the registry
-
-Both apps use private organisation packages: `ghcr.io/roborewdev/rekalled-api` and
-`ghcr.io/roborewdev/rekalled-web`. Staging and production use these same packages;
-only their tags differ.
-
-| Tag                | Created by                            | Used by    |
-| ------------------ | ------------------------------------- | ---------- |
-| `sha-3f9c2a1b7d04` | Every merge to `main`                 | Staging    |
-| `v0.3.0`           | Your git tag, added to the same image | Production |
-
-There's no `latest`, `main` or `staging` image tag, so a tag always tells you exactly which build is running.
+See [Deployment setup](PLAN.md) for configuration and [GHCR cleanup](GHCR-RETENTION.md) for image retention.
