@@ -49,9 +49,10 @@ esac
 
 domain="${INFISICAL_API_URL:-${INFISICAL_DOMAIN:-https://app.infisical.com/api}}"
 export INFISICAL_DISABLE_UPDATE_CHECK=true
-# The app must never see the long-lived machine identity, whichever alias set it.
+# The app must never see the machine identity's credentials, whichever alias set them,
+# nor an inherited INFISICAL_TOKEN: the --token flag below authenticates the CLI.
 unset INFISICAL_CLIENT_ID INFISICAL_CLIENT_SECRET \
-  INFISICAL_UNIVERSAL_AUTH_CLIENT_ID INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
+  INFISICAL_UNIVERSAL_AUTH_CLIENT_ID INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET INFISICAL_TOKEN
 
 # Exchange the machine identity for a short-lived token.
 if ! token="$(infisical login --method=universal-auth \

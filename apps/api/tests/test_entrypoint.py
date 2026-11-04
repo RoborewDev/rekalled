@@ -105,6 +105,14 @@ def test_the_app_never_sees_the_access_token(entrypoint):
     assert "fake-token" not in result.stdout
 
 
+def test_an_inherited_infisical_token_is_not_passed_to_the_app(entrypoint):
+    result = entrypoint.run({**BOOTSTRAP, "INFISICAL_TOKEN": "inherited-token"})
+
+    assert result.returncode == 0, result.stderr
+    assert "INFISICAL_TOKEN" not in result.stdout
+    assert "inherited-token" not in result.stdout
+
+
 def test_partial_infisical_config_fails_instead_of_falling_back(entrypoint):
     env = {k: v for k, v in BOOTSTRAP.items() if k != "INFISICAL_CLIENT_SECRET"}
 
