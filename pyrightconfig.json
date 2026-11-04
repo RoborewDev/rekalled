@@ -1,0 +1,4 @@
+{
+  "venvPath": ".",
+  "venv": "apps/api/.venv"
+}
