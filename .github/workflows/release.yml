@@ -1,5 +1,5 @@
 # Code landed on main: run CI again on the merged commit, build each image ONCE, push it
-# to DigitalOcean Container Registry as sha-<12>, then deploy that exact image to staging.
+# to GHCR as sha-<12>, then deploy that exact image to staging.
 # Production never rebuilds: promote.yml re-points production at the same image.
 name: Release (main -> staging)
 
@@ -26,6 +26,9 @@ jobs:
     needs: ci
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read # check out the source for the release build
+      packages: write # publish the API and web images to GHCR
     services:
       postgres:
         image: pgvector/pgvector:pg17@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8
@@ -47,14 +50,13 @@ jobs:
       - name: Image names and tag
         id: meta
         env:
-          REGISTRY: ${{ vars.REGISTRY }}
-          DO_REGISTRY_NAME: ${{ vars.DO_REGISTRY_NAME }}
+          OWNER: ${{ github.repository_owner }}
         run: |
-          : "${REGISTRY:?set repo variable REGISTRY}" "${DO_REGISTRY_NAME:?set repo variable DO_REGISTRY_NAME}"
+          prefix="ghcr.io/${OWNER,,}"
           {
             echo "tag=sha-${GITHUB_SHA::12}"
-            echo "api=${REGISTRY}/${DO_REGISTRY_NAME}/rekalled-api"
-            echo "web=${REGISTRY}/${DO_REGISTRY_NAME}/rekalled-web"
+            echo "api=${prefix}/rekalled-api"
+            echo "web=${prefix}/rekalled-web"
             echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } >> "$GITHUB_OUTPUT"
 
@@ -62,9 +64,9 @@ jobs:
 
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          registry: ${{ vars.REGISTRY }}
-          username: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-          password: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # No build cache here: a release build never reads cache written by pull requests.
       - name: Build and push API
@@ -128,24 +130,9 @@ jobs:
     name: Deploy to staging
     needs: build
     uses: ./.github/workflows/deploy.yml
+    secrets:
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
     with:
       environment: staging
       image-tag: ${{ needs.build.outputs.tag }}
       expected-sha: ${{ github.sha }}
-
-  prune:
-    name: Prune old sha- tags (non-blocking)
-    needs: staging
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - env:
-          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-          DO_REGISTRY_NAME: ${{ vars.DO_REGISTRY_NAME }}
-        run: |
-          scripts/deploy/prune-registry.sh rekalled-api 15
-          scripts/deploy/prune-registry.sh rekalled-web 15

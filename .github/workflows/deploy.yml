@@ -1,10 +1,14 @@
 # Reusable deploy: point the Coolify apps of ONE environment at an existing image tag.
 # Staging and production run this same file; only the GitHub environment differs, and
-# each environment holds its own COOLIFY_* variables and secret under the same names.
+# each environment holds its app variables under the same names.
+# COOLIFY_BASE_URL is a repository variable; COOLIFY_TOKEN is passed by the caller.
 name: Deploy
 
 on:
   workflow_call:
+    secrets:
+      COOLIFY_TOKEN:
+        required: true
     inputs:
       environment:
         description: GitHub environment (staging or production)
