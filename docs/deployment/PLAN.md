@@ -84,6 +84,10 @@ INFISICAL_CLIENT_SECRET
 
 Keep credentials runtime-only, not build-time. The API image uses the Infisical CLI to load settings when it starts.
 
+`INFISICAL_ENV` is the Infisical environment slug for that app: `staging` on staging and `prod` on production. Never use `dev`. Its `DATABASE_URL` points at the docker-compose Postgres on localhost. `infisical run` exports its values last, so they override anything set in Coolify. The entrypoint therefore refuses `dev`, `development` and `local` and stops the container with a clear error. It also stops when the bootstrap variables are only partly set, or when login fails. Its first log line, `[entrypoint] secrets: infisical (project=… env=… domain=…)`, shows which environment loaded. The `INFISICAL_UNIVERSAL_AUTH_CLIENT_ID`/`_SECRET` and `INFISICAL_DOMAIN` aliases from `scripts/env-pull.sh` are also accepted.
+
+`DATABASE_URL` may be pasted as the provider gives it, such as `postgresql://…?sslmode=require` from DigitalOcean. Settings rewrites it for asyncpg as `postgresql+asyncpg://…?ssl=require`.
+
 In Infisical, set `ENV=production`, `AUTH_MODE=logto` and the environment's `DATABASE_URL`, plus the authentication and AI settings required by the implemented features. Use an identity with access only to its own environment.
 
 Keep secrets out of the web image. Any public configuration that differs between environments must be supplied at runtime, not baked into `VITE_*` build settings.

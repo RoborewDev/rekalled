@@ -79,3 +79,40 @@ def test_settings_errors_do_not_echo_secrets(monkeypatch):
         Settings(_env_file=None, env="production", auth_mode="dev")  # pyright: ignore[reportCallIssue]
 
     assert "S3cretPW" not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        (
+            "postgresql://u:pw@db.example:25060/app",
+            "postgresql+asyncpg://u:pw@db.example:25060/app",
+        ),
+        ("postgres://u:pw@db.example:25060/app", "postgresql+asyncpg://u:pw@db.example:25060/app"),
+        ("postgresql+asyncpg://u:pw@db.example/app", "postgresql+asyncpg://u:pw@db.example/app"),
+        # Managed Postgres (DigitalOcean) appends libpq's sslmode, which asyncpg rejects.
+        (
+            "postgresql://u:pw@db.example:25060/app?sslmode=require",
+            "postgresql+asyncpg://u:pw@db.example:25060/app?ssl=require",
+        ),
+    ],
+)
+def test_database_url_is_normalised_for_asyncpg(given, expected):
+    settings = Settings(_env_file=None, database_url=given, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+
+    assert settings.database_url.get_secret_value() == expected
+
+
+def test_database_url_keeps_special_characters_in_the_password():
+    url = "postgresql+asyncpg://u:p%40ss%2Fw@db.example/app"
+
+    settings = Settings(_env_file=None, database_url=url, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+
+    assert settings.database_url.get_secret_value() == url
+
+
+def test_an_unparseable_database_url_is_refused_without_echoing_it():
+    with pytest.raises(ValidationError) as exc:
+        Settings(_env_file=None, database_url="not a url S3cretPW", auth_mode="dev")  # pyright: ignore[reportCallIssue]
+
+    assert "S3cretPW" not in str(exc.value)
