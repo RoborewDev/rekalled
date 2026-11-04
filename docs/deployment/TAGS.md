@@ -55,6 +55,10 @@ The setup checklist in [`PLAN.md`](PLAN.md#one-time-setup-checklist) creates a t
 
 ## In the registry
 
+Both apps use private organisation packages: `ghcr.io/roborewdev/rekalled-api` and
+`ghcr.io/roborewdev/rekalled-web`. Staging and production use these same packages;
+only their tags differ.
+
 | Tag                | Created by                            | Used by    |
 | ------------------ | ------------------------------------- | ---------- |
 | `sha-3f9c2a1b7d04` | Every merge to `main`                 | Staging    |

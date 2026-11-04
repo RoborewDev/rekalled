@@ -14,8 +14,8 @@ worktree branch ──PR──▶ main
    │  ├ repo-lint         │  ├ ci.yml again on the merged commit (no image job)
    │  ├ api               │  ├ build rekalled-api + rekalled-web ONCE  → :sha-<12>
    │  ├ web               │  ├ pull back, smoke test, Grype scan
-   │  ├ images (build,    │  ├ deploy.yml  environment=staging  (API, then web)
-   │  │  smoke, scan)     │  └ prune old sha- tags (non-blocking)
+   │  ├ images (build,    │  └ deploy.yml  environment=staging  (API, then web)
+   │  │  smoke, scan)     │
    │  └ ci-ok  ◀── required check
    │  CodeRabbit ◀── required check
    │
@@ -45,6 +45,9 @@ The repo uses trunk-based development with a single long-lived branch, `main`.
 ### 2. Build once, promote the same image
 
 - Each merge to `main` builds each app exactly once and pushes it as `sha-<first 12 of commit>`.
+- Images live in private GHCR packages `ghcr.io/roborewdev/rekalled-api` and
+  `ghcr.io/roborewdev/rekalled-web`. GitHub Actions publishes with its built-in
+  `GITHUB_TOKEN`; only publishing and promotion jobs receive `packages: write`.
 - Staging deploys that tag automatically.
 - Production runs the same bytes. A semver tag adds a `vX.Y.Z` alias to the existing
   manifest using `docker buildx imagetools create`. The workflow then checks that both tags
@@ -175,7 +178,6 @@ Coolify should pull a pre-built image. It should not build one.
 | `apps/web/vite.config.ts`                                                 | Excludes the generated `routeTree.gen.ts` from `vp fmt`. Without this, `vp check` fails in CI on a clean checkout.     |
 | `scripts/ci/smoke-images.sh`                                              | Starts both images as Coolify would: production settings, migrations, health, `/v1/me` = 401.                          |
 | `scripts/deploy/coolify-deploy.sh`                                        | PATCH tag → POST deploy → poll the deployment → check health serves the expected SHA.                                  |
-| `scripts/deploy/prune-registry.sh`                                        | Keeps the newest 15 `sha-` tags per repo. Never touches `v*` tags.                                                     |
 | `justfile`                                                                | `just images` and `just smoke` reproduce CI locally.                                                                   |
 
 ## One-time setup checklist
@@ -207,11 +209,8 @@ Coolify should pull a pre-built image. It should not build one.
 
    | Scope                  | Name                        | Kind     | Value                                            |
    | ---------------------- | --------------------------- | -------- | ------------------------------------------------ |
-   | Repository             | `DIGITALOCEAN_ACCESS_TOKEN` | secret   | DO token scoped to the registry (read and write) |
-   | Repository             | `REGISTRY`                  | variable | `registry.digitalocean.com`                      |
-   | Repository             | `DO_REGISTRY_NAME`          | variable | your registry name                               |
-   | staging and production | `COOLIFY_TOKEN`             | secret   | Coolify API token with deploy and write          |
-   | staging and production | `COOLIFY_BASE_URL`          | variable | `https://coolify.example.com`                    |
+   | Repository             | `COOLIFY_TOKEN`             | secret   | Coolify API token with deploy and write; explicitly passed to deploy.yml |
+   | Repository             | `COOLIFY_BASE_URL`          | variable | `https://coolify.example.com`                    |
    | staging and production | `COOLIFY_API_UUID`          | variable | UUID of that environment's API app               |
    | staging and production | `COOLIFY_WEB_UUID`          | variable | UUID of that environment's web app               |
    | staging and production | `API_HEALTH_URL`            | variable | `https://api.staging.example.com/v1/health`      |
@@ -219,16 +218,23 @@ Coolify should pull a pre-built image. It should not build one.
 
 7. Install CodeRabbit on the repo. `.coderabbit.yaml` in the repo root configures it.
 
-### DigitalOcean Container Registry
+### GitHub Container Registry
 
-1. Create two repositories by pushing to them (the first release does this):
-   `rekalled-api` and `rekalled-web`.
-2. Create two tokens:
-   - a read/write token for GitHub;
-   - a read-only token for the Coolify server, used via Coolify's registry login or
-     `docker login registry.digitalocean.com` on the host.
-3. Storage is reclaimed only by garbage collection, and the registry is read-only while it
-   runs. Schedule it outside deploy times (for example, weekly).
+1. Keep private package creation and source-repository permission inheritance enabled in
+   the organisation. The first release publishes `ghcr.io/roborewdev/rekalled-api` and
+   `ghcr.io/roborewdev/rekalled-web`, linked to this repository.
+2. Actions uses `GITHUB_TOKEN` automatically. Do not create a publishing PAT secret.
+3. For private pulls, create a PAT (classic) with `read:packages`, using an account that
+   can read these organisation packages. Authorise it for SSO if required. Enter it yourself
+   through Coolify's server registry login, or run `docker login ghcr.io -u roborew`
+   on the deployment server as the user Coolify uses for Docker.
+4. No automatic image deletion runs during deployment. Any future retention job must
+   protect release versions, deployed versions, rollback candidates and attestations.
+
+Authentication and namespace ownership follow the
+[GitHub Container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+Server login must use the deployment server's Docker user, as described in
+[Coolify's registry documentation](https://coolify.io/docs/knowledge-base/docker/registry).
 
 ### Coolify
 
@@ -239,14 +245,14 @@ Coolify should pull a pre-built image. It should not build one.
      - Turn on scheduled backups to DO Spaces.
      - Take a manual backup before each production tag.
    - API: New resource → Docker Image →
-     `registry.digitalocean.com/<registry>/rekalled-api`, tag `sha-…` (CI overwrites it).
+     `ghcr.io/roborewdev/rekalled-api`, tag `sha-…` (CI overwrites it).
      - Port 8000. Domain `api.<env-domain>`.
      - Health check type **CMD**: `python /app/docker/healthcheck.py`, with interval 10,
        timeout 5, retries 3 and start period 60.
      - The check is a script in the image because Coolify rejects quotes and brackets in
        health check commands, and the slim images have no curl or wget for HTTP checks
        ([Coolify health checks](https://coolify.io/docs/knowledge-base/health-checks)).
-   - Web: Docker Image → `…/rekalled-web`, port 3000, domain `<env-domain>`.
+   - Web: Docker Image → `ghcr.io/roborewdev/rekalled-web`, port 3000, domain `<env-domain>`.
      - Health check type **CMD**: `node /app/healthcheck.mjs`, with interval 10, timeout 5,
        retries 3 and start period 20.
 3. Don't map host ports and don't set a custom container name. Either one disables rolling
