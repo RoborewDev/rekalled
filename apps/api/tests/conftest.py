@@ -22,13 +22,17 @@ os.environ["AUTH_MODE"] = "dev"
 # Hard override: a dev DATABASE_URL exported by `just`/dotenv must never leak into tests.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
-from collections.abc import AsyncIterator  # noqa: E402
+from collections.abc import AsyncIterator, Callable  # noqa: E402
 
 import pytest  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine  # noqa: E402
 
+from app.api.deps import get_card_generator  # noqa: E402
+from app.core.config import Settings, get_settings  # noqa: E402
 from app.core.db import get_session  # noqa: E402
+from app.generation.fake import FakeCardGenerator  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
@@ -68,8 +72,27 @@ async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
 
 
 @pytest.fixture
-async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
+def app() -> FastAPI:
     app = create_app()
+    # Never call a real LLM in tests. Individual tests can override this again.
+    app.dependency_overrides[get_card_generator] = FakeCardGenerator
+    return app
+
+
+@pytest.fixture
+def override_settings(app: FastAPI) -> Callable[..., Settings]:
+    """override_settings(max_cards=2): this test's app sees changed config, nothing else does."""
+
+    def apply(**changes: object) -> Settings:
+        settings = get_settings().model_copy(update=changes)
+        app.dependency_overrides[get_settings] = lambda: settings
+        return settings
+
+    return apply
+
+
+@pytest.fixture
+async def client(session: AsyncSession, app: FastAPI) -> AsyncIterator[AsyncClient]:
     app.dependency_overrides[get_session] = lambda: session
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
