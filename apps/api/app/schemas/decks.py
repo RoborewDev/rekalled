@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,7 +14,7 @@ class DeckUpdate(BaseModel):
 
 
 class DeckOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     name: str

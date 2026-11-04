@@ -36,15 +36,15 @@ BOOTSTRAP = {
 
 class Entrypoint:
     def __init__(self, tmp_path: Path) -> None:
-        self.bin_dir = tmp_path / "bin"
+        self.bin_dir: Path = tmp_path / "bin"
         self.bin_dir.mkdir()
         fake = self.bin_dir / "infisical"
-        fake.write_text(FAKE_INFISICAL)
+        _ = fake.write_text(FAKE_INFISICAL)
         fake.chmod(0o755)
         # Normalise line endings so the test also runs from a CRLF (autocrlf) checkout.
-        self.script = tmp_path / "entrypoint.sh"
-        self.script.write_text(ENTRYPOINT.read_text().replace("\r\n", "\n"))
-        self.log = tmp_path / "infisical.log"
+        self.script: Path = tmp_path / "entrypoint.sh"
+        _ = self.script.write_text(ENTRYPOINT.read_text().replace("\r\n", "\n"))
+        self.log: Path = tmp_path / "infisical.log"
 
     def run(self, env: dict[str, str], *command: str) -> subprocess.CompletedProcess[str]:
         base = {"PATH": f"{self.bin_dir}{os.pathsep}/usr/bin:/bin", "FAKE_LOG": str(self.log)}
@@ -66,7 +66,9 @@ def entrypoint(tmp_path: Path) -> Entrypoint:
     return Entrypoint(tmp_path)
 
 
-def test_without_infisical_it_runs_the_command_with_platform_variables(entrypoint):
+def test_without_infisical_it_runs_the_command_with_platform_variables(
+    entrypoint: Entrypoint,
+) -> None:
     result = entrypoint.run({"DATABASE_URL": "postgresql+asyncpg://db/app"})
 
     assert result.returncode == 0, result.stderr
@@ -75,7 +77,7 @@ def test_without_infisical_it_runs_the_command_with_platform_variables(entrypoin
     assert entrypoint.calls() == []
 
 
-def test_with_infisical_it_wraps_the_command_in_infisical_run(entrypoint):
+def test_with_infisical_it_wraps_the_command_in_infisical_run(entrypoint: Entrypoint) -> None:
     result = entrypoint.run(BOOTSTRAP)
 
     assert result.returncode == 0, result.stderr
@@ -88,7 +90,7 @@ def test_with_infisical_it_wraps_the_command_in_infisical_run(entrypoint):
     assert "env=staging" in result.stderr
 
 
-def test_the_app_never_sees_the_long_lived_client_credentials(entrypoint):
+def test_the_app_never_sees_the_long_lived_client_credentials(entrypoint: Entrypoint) -> None:
     result = entrypoint.run(BOOTSTRAP)
 
     assert result.returncode == 0, result.stderr
@@ -97,7 +99,7 @@ def test_the_app_never_sees_the_long_lived_client_credentials(entrypoint):
     assert "S3cretClient" not in result.stderr
 
 
-def test_the_app_never_sees_the_access_token(entrypoint):
+def test_the_app_never_sees_the_access_token(entrypoint: Entrypoint) -> None:
     result = entrypoint.run(BOOTSTRAP)
 
     assert result.returncode == 0, result.stderr
@@ -105,7 +107,7 @@ def test_the_app_never_sees_the_access_token(entrypoint):
     assert "fake-token" not in result.stdout
 
 
-def test_an_inherited_infisical_token_is_not_passed_to_the_app(entrypoint):
+def test_an_inherited_infisical_token_is_not_passed_to_the_app(entrypoint: Entrypoint) -> None:
     result = entrypoint.run({**BOOTSTRAP, "INFISICAL_TOKEN": "inherited-token"})
 
     assert result.returncode == 0, result.stderr
@@ -113,7 +115,7 @@ def test_an_inherited_infisical_token_is_not_passed_to_the_app(entrypoint):
     assert "inherited-token" not in result.stdout
 
 
-def test_partial_infisical_config_fails_instead_of_falling_back(entrypoint):
+def test_partial_infisical_config_fails_instead_of_falling_back(entrypoint: Entrypoint) -> None:
     env = {k: v for k, v in BOOTSTRAP.items() if k != "INFISICAL_CLIENT_SECRET"}
 
     result = entrypoint.run(env)
@@ -124,7 +126,7 @@ def test_partial_infisical_config_fails_instead_of_falling_back(entrypoint):
 
 
 @pytest.mark.parametrize("slug", ["dev", "development", "local"])
-def test_a_development_slug_is_refused(entrypoint, slug):
+def test_a_development_slug_is_refused(entrypoint: Entrypoint, slug: str) -> None:
     result = entrypoint.run({**BOOTSTRAP, "INFISICAL_ENV": slug})
 
     assert result.returncode != 0
@@ -132,7 +134,7 @@ def test_a_development_slug_is_refused(entrypoint, slug):
     assert entrypoint.calls() == []
 
 
-def test_a_development_slug_can_be_allowed_explicitly(entrypoint):
+def test_a_development_slug_can_be_allowed_explicitly(entrypoint: Entrypoint) -> None:
     env = {**BOOTSTRAP, "INFISICAL_ENV": "dev", "INFISICAL_ALLOW_DEV_ENV": "true"}
 
     result = entrypoint.run(env)
@@ -141,7 +143,7 @@ def test_a_development_slug_can_be_allowed_explicitly(entrypoint):
     assert "--env=dev" in entrypoint.calls()[1]
 
 
-def test_the_universal_auth_and_domain_aliases_are_accepted(entrypoint):
+def test_the_universal_auth_and_domain_aliases_are_accepted(entrypoint: Entrypoint) -> None:
     env = {
         "INFISICAL_PROJECT_ID": "proj-123",
         "INFISICAL_UNIVERSAL_AUTH_CLIENT_ID": "client-abc",
@@ -157,7 +159,7 @@ def test_the_universal_auth_and_domain_aliases_are_accepted(entrypoint):
     assert "--domain=https://alias.example.test" in entrypoint.calls()[0]
 
 
-def test_a_failed_login_stops_the_container(entrypoint):
+def test_a_failed_login_stops_the_container(entrypoint: Entrypoint) -> None:
     result = entrypoint.run({**BOOTSTRAP, "FAKE_LOGIN_FAILS": "1"})
 
     assert result.returncode != 0

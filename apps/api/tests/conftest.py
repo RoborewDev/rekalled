@@ -1,4 +1,5 @@
 import os
+from typing import ClassVar
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
@@ -8,7 +9,9 @@ from app.core.config import ENV_FILES
 
 class _TestDatabase(BaseSettings):
     # TEST_DATABASE_URL from the environment or .env. No fallback: tests never guess a DB.
-    model_config = SettingsConfigDict(env_file=ENV_FILES, extra="ignore")
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+        env_file=ENV_FILES, extra="ignore"
+    )
 
     test_database_url: str
 

@@ -65,7 +65,7 @@ def do_run_migrations(connection: Connection) -> None:
         # Containers run `alembic upgrade head` when they start. If two start at once, the
         # second waits here until the first commits, then finds nothing left to apply.
         # A transaction-level lock is released automatically on commit or rollback.
-        connection.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": MIGRATION_LOCK_ID})
+        _ = connection.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": MIGRATION_LOCK_ID})
         context.run_migrations()
 
 

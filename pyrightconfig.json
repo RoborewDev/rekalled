@@ -1,4 +1,8 @@
 {
   "venvPath": ".",
-  "venv": "apps/api/.venv"
+  "venv": "apps/api/.venv",
+  "pythonVersion": "3.13",
+  "extraPaths": [
+    "apps/api"
+  ]
 }
