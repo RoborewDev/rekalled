@@ -85,7 +85,9 @@ def test_settings_errors_do_not_echo_secrets(monkeypatch: pytest.MonkeyPatch) ->
     assert "S3cretPW" not in str(exc.value)
 
 
-def test_generation_settings_have_safe_defaults() -> None:
+def test_generation_settings_have_safe_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("CARD_GENERATOR", "MAX_SOURCE_CHARS", "MAX_CARDS", "MAX_SOURCES_PER_DAY"):
+        monkeypatch.delenv(name, raising=False)
     settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
 
     assert settings.card_generator == "ai"
