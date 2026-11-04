@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,20 @@ from pydantic import ValidationError
 from app.core.config import Settings
 
 SECRET_URL = "postgresql+asyncpg://u:S3cretPW@localhost:5432/rekalled"
+
+_GENERATION_ENV_NAMES = {
+    "card_generator",
+    "max_source_chars",
+    "max_cards",
+    "max_sources_per_day",
+}
+
+
+def _clear_generation_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Settings matches env names case-insensitively; delenv only removes the exact key.
+    for key in list(os.environ):
+        if key.casefold() in _GENERATION_ENV_NAMES:
+            monkeypatch.delenv(key, raising=False)
 
 
 def test_database_url_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,14 +101,22 @@ def test_settings_errors_do_not_echo_secrets(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_generation_settings_have_safe_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("CARD_GENERATOR", "MAX_SOURCE_CHARS", "MAX_CARDS", "MAX_SOURCES_PER_DAY"):
-        monkeypatch.delenv(name, raising=False)
+    _clear_generation_env(monkeypatch)
     settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
 
     assert settings.card_generator == "ai"
     assert settings.max_source_chars == 20_000
     assert settings.max_cards == 20
     assert settings.max_sources_per_day == 50
+
+
+def test_generation_env_cleanup_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("card_generator", "fake")
+    _clear_generation_env(monkeypatch)
+
+    settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+
+    assert settings.card_generator == "ai"
 
 
 @pytest.mark.parametrize(
