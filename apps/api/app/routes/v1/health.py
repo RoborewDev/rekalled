@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy import text
 
-from app.api.deps import SessionDep, SettingsDep
+from app.routes.deps import SessionDep, SettingsDep
 
 router = APIRouter(tags=["health"])
 

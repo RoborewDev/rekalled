@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.params import Depends as DependsParam
 
-from app.api.deps import SessionDep, SettingsDep
+from app.routes.deps import SessionDep, SettingsDep
 from app.auth.dev import dev_principal
 from app.auth.principal import Principal
 from app.models import User

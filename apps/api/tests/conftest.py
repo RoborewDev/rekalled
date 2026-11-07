@@ -32,7 +32,7 @@ from fastapi import FastAPI  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine  # noqa: E402
 
-from app.api.deps import get_card_generator  # noqa: E402
+from app.routes.deps import get_card_generator  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.core.db import get_session  # noqa: E402
 from app.generation.fake import FakeCardGenerator  # noqa: E402

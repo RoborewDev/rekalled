@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
-from app.api.v1.router import api_router
 from app.core.errors import register_error_handlers
+from app.routes.v1.router import api_router
 
 
 def create_app() -> FastAPI:

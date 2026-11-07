@@ -3,7 +3,7 @@ from collections.abc import Callable
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from app.api.deps import get_card_generator
+from app.routes.deps import get_card_generator
 from app.core.config import Settings
 from app.generation.base import CardDraft, GenerationError
 from app.generation.fake import FailingCardGenerator, FakeCardGenerator
