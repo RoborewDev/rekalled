@@ -79,7 +79,7 @@ class LlmCardGenerator:
         ]
 
 
-_CLOSING_FENCE = re.compile(r"</material>", re.IGNORECASE)
+_CLOSING_FENCE = re.compile(r"<\s*/\s*material\s*/?\s*>", re.IGNORECASE)
 
 
 def build_prompt(text: str) -> str:
