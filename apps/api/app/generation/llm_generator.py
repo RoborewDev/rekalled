@@ -40,7 +40,9 @@ class LlmCardGenerator:
     def __init__(self, model: Model) -> None:
         # output_type makes the agent validate the reply against _ModelOutput. If it does
         # not validate, the agent sends the validation errors back and retries once.
-        self._agent = Agent(model, output_type=_ModelOutput, retries={"output": 1})
+        self._agent: Agent[object, _ModelOutput] = Agent(
+            model, output_type=_ModelOutput, retries={"output": 1}
+        )
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "LlmCardGenerator":

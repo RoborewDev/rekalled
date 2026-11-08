@@ -6,23 +6,26 @@ Pydantic AI Gateway, e.g. `gateway/openai:gpt-5.4-mini`. Anything else (`openai:
 """
 
 from collections.abc import Callable
-from typing import Any
 
 from pydantic_ai.models import Model, infer_model
 from pydantic_ai.providers import Provider, infer_provider
-from pydantic_ai.providers.gateway import gateway_provider
+
+# Several gateway_provider overloads return Provider[Unknown] in pydantic-ai's own types.
+from pydantic_ai.providers.gateway import (
+    gateway_provider,  # pyright: ignore[reportUnknownVariableType]
+)
 
 from app.core.config import Settings
 
 GATEWAY_PREFIX = "gateway/"
 
 
-def _provider_factory(settings: Settings) -> Callable[[str], Provider[Any]]:
+def _provider_factory(settings: Settings) -> Callable[[str], Provider[object]]:
     # Pass the key from Settings explicitly: pydantic-settings reads .env into Settings,
     # not into os.environ, so the gateway would not find PYDANTIC_AI_GATEWAY_API_KEY itself.
     api_key = settings.pydantic_ai_gateway_api_key.get_secret_value() or None
 
-    def factory(provider_name: str) -> Provider[Any]:
+    def factory(provider_name: str) -> Provider[object]:
         if provider_name.startswith(GATEWAY_PREFIX):
             return gateway_provider(provider_name.removeprefix(GATEWAY_PREFIX), api_key=api_key)
         return infer_provider(provider_name)

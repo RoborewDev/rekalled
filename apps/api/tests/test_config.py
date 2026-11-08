@@ -27,11 +27,11 @@ def test_database_url_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DATABASE_URL")
 
     with pytest.raises(ValidationError):
-        _ = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+        _ = Settings.model_validate({"_env_file": None})
 
 
 def test_database_url_is_masked_in_repr() -> None:
-    settings = Settings(_env_file=None, database_url=SECRET_URL)  # pyright: ignore[reportCallIssue]
+    settings = Settings.model_validate({"_env_file": None, "database_url": SECRET_URL})
 
     assert "S3cretPW" not in repr(settings)
     assert settings.database_url.get_secret_value() == SECRET_URL
@@ -41,16 +41,16 @@ def test_errors_do_not_echo_the_input(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", SECRET_URL)
 
     with pytest.raises(ValidationError) as exc:
-        _ = Settings(_env_file=None, env="staging")  # pyright: ignore[reportCallIssue]
+        _ = Settings.model_validate({"_env_file": None, "env": "staging"})
 
     assert "S3cretPW" not in str(exc.value)
 
 
-def test_settings_errors_do_not_echo_the_gateway_key(monkeypatch):
+def test_settings_errors_do_not_echo_the_gateway_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PYDANTIC_AI_GATEWAY_API_KEY", "pylf_canary_key")
 
     with pytest.raises(ValidationError) as exc:
-        Settings(_env_file=None, env="production", auth_mode="dev")
+        _ = Settings.model_validate({"_env_file": None, "env": "production", "auth_mode": "dev"})
 
     assert "pylf_canary_key" not in str(exc.value)
 
@@ -75,7 +75,9 @@ def test_env_files_do_not_depend_on_the_working_directory(
 def test_git_sha_defaults_to_local(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GIT_SHA", raising=False)
 
-    settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+    settings = Settings.model_validate(
+        {"_env_file": None, "database_url": SECRET_URL, "auth_mode": "dev"}
+    )
 
     assert settings.git_sha == "local"
 
@@ -83,7 +85,9 @@ def test_git_sha_defaults_to_local(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_git_sha_reads_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GIT_SHA", "abc")
 
-    settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+    settings = Settings.model_validate(
+        {"_env_file": None, "database_url": SECRET_URL, "auth_mode": "dev"}
+    )
 
     assert settings.git_sha == "abc"
 
@@ -92,26 +96,28 @@ def test_auth_mode_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTH_MODE")
 
     with pytest.raises(ValidationError):
-        _ = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+        _ = Settings.model_validate({"_env_file": None})
 
 
 def test_unknown_env_values_are_refused() -> None:
     with pytest.raises(ValidationError):
-        _ = Settings(_env_file=None, env="staging", auth_mode="dev")  # pyright: ignore[reportCallIssue]
+        _ = Settings.model_validate({"_env_file": None, "env": "staging", "auth_mode": "dev"})
 
 
 def test_settings_errors_do_not_echo_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", SECRET_URL)
 
     with pytest.raises(ValidationError) as exc:
-        _ = Settings(_env_file=None, env="production", auth_mode="dev")  # pyright: ignore[reportCallIssue]
+        _ = Settings.model_validate({"_env_file": None, "env": "production", "auth_mode": "dev"})
 
     assert "S3cretPW" not in str(exc.value)
 
 
 def test_generation_settings_have_safe_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_generation_env(monkeypatch)
-    settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+    settings = Settings.model_validate(
+        {"_env_file": None, "database_url": SECRET_URL, "auth_mode": "dev"}
+    )
 
     assert settings.card_generator == "ai"
     assert settings.max_source_chars == 20_000
@@ -123,7 +129,9 @@ def test_generation_env_cleanup_is_case_insensitive(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("card_generator", "fake")
     _clear_generation_env(monkeypatch)
 
-    settings = Settings(_env_file=None, database_url=SECRET_URL, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+    settings = Settings.model_validate(
+        {"_env_file": None, "database_url": SECRET_URL, "auth_mode": "dev"}
+    )
 
     assert settings.card_generator == "ai"
 
@@ -162,7 +170,9 @@ def test_generation_settings_reject_unsafe_values(setting: str, value: int) -> N
     ],
 )
 def test_database_url_is_normalised_for_asyncpg(given: str, expected: str) -> None:
-    settings = Settings(_env_file=None, database_url=given, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+    settings = Settings.model_validate(
+        {"_env_file": None, "database_url": given, "auth_mode": "dev"}
+    )
 
     assert settings.database_url.get_secret_value() == expected
 
@@ -170,13 +180,15 @@ def test_database_url_is_normalised_for_asyncpg(given: str, expected: str) -> No
 def test_database_url_keeps_special_characters_in_the_password() -> None:
     url = "postgresql+asyncpg://u:p%40ss%2Fw@db.example/app"
 
-    settings = Settings(_env_file=None, database_url=url, auth_mode="dev")  # pyright: ignore[reportCallIssue]
+    settings = Settings.model_validate({"_env_file": None, "database_url": url, "auth_mode": "dev"})
 
     assert settings.database_url.get_secret_value() == url
 
 
 def test_an_unparseable_database_url_is_refused_without_echoing_it() -> None:
     with pytest.raises(ValidationError) as exc:
-        _ = Settings(_env_file=None, database_url="not a url S3cretPW", auth_mode="dev")  # pyright: ignore[reportCallIssue]
+        _ = Settings.model_validate(
+            {"_env_file": None, "database_url": "not a url S3cretPW", "auth_mode": "dev"}
+        )
 
     assert "S3cretPW" not in str(exc.value)

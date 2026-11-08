@@ -3,9 +3,9 @@ import uuid
 from fastapi import APIRouter, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import CardGeneratorDep, SessionDep, SettingsDep
 from app.auth.dependencies import CurrentUser, require_scope
 from app.models import Source
-from app.api.deps import CardGeneratorDep, SessionDep, SettingsDep
 from app.schemas.sources import CardOut, SourceCreate, SourceOut
 from app.services import generation
 
