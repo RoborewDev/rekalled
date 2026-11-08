@@ -134,6 +134,26 @@ def test_generation_settings_have_safe_defaults(monkeypatch: pytest.MonkeyPatch)
     assert settings.max_sources_per_day == 50
 
 
+def test_due_cards_per_session_defaults_to_200() -> None:
+    settings = Settings.model_validate(
+        {"_env_file": None, "database_url": SECRET_URL, "auth_mode": "dev"}
+    )
+
+    assert settings.due_cards_per_session == 200
+
+
+def test_due_cards_per_session_rejects_zero() -> None:
+    with pytest.raises(ValidationError):
+        _ = Settings.model_validate(
+            {
+                "_env_file": None,
+                "database_url": SECRET_URL,
+                "auth_mode": "dev",
+                "due_cards_per_session": 0,
+            }
+        )
+
+
 def test_gateway_models_require_the_gateway_key() -> None:
     with pytest.raises(ValidationError, match="PYDANTIC_AI_GATEWAY_API_KEY is required"):
         _ = Settings.model_validate(
