@@ -7,13 +7,8 @@ from app.api.deps import get_card_generator
 from app.core.config import Settings
 from app.generation.base import CardDraft, GenerationError
 from app.generation.fake import FailingCardGenerator, FakeCardGenerator
-from tests.api_types import DeckJson, GenerationFailedJson, SourceJson, json_object
-
-TEXT = "Postgres uses MVCC. Each row version has xmin and xmax. VACUUM removes dead tuples."
-
-
-async def make_deck(client: AsyncClient) -> str:
-    return json_object(await client.post("/v1/decks", json={"name": "Postgres"}), DeckJson)["id"]
+from tests.api_types import GenerationFailedJson, SourceJson, json_object
+from tests.helpers import TEXT, make_deck
 
 
 async def test_pasting_text_creates_a_source_with_draft_cards(client: AsyncClient) -> None:

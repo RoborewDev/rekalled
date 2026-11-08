@@ -1,7 +1,18 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, SmallInteger, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -56,6 +67,7 @@ class Source(TimestampMixin, Base):
 
 class Card(TimestampMixin, Base):
     __tablename__: str = "cards"
+    __table_args__ = (Index("ix_cards_owner_due", "owner_id", "due_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[uuid.UUID] = mapped_column(
@@ -73,3 +85,12 @@ class Card(TimestampMixin, Base):
     question: Mapped[str] = mapped_column(Text)
     answer: Mapped[str] = mapped_column(Text)
     source_excerpt: Mapped[str | None] = mapped_column(Text)
+    # FSRS memory state. All null while the card is a draft.
+    fsrs_state: Mapped[int | None] = mapped_column(SmallInteger)  # 1 Learning 2 Review 3 Relearning
+    fsrs_step: Mapped[int | None] = mapped_column(SmallInteger)
+    stability: Mapped[float | None] = mapped_column(Float)
+    difficulty: Mapped[float | None] = mapped_column(Float)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reps: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    lapses: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
