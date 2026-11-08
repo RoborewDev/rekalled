@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,10 +9,10 @@ from app.core.errors import register_error_handlers
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     # Validate settings before serving traffic. Migrations usually read them first, but
     # MIGRATE_ON_START=false must still fail here rather than on the first request.
-    get_settings()
+    _ = get_settings()
     yield
 
 
