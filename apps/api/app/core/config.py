@@ -29,6 +29,9 @@ class Settings(BaseSettings):
 
     # Card generation. "fake" needs no API key: handy for frontend work and E2E.
     card_generator: Literal["ai", "fake"] = "ai"
+    # A Pydantic AI model string. "gateway/" routes through Pydantic AI Gateway.
+    ai_model: str = "gateway/openai:gpt-5.4-mini"
+    pydantic_ai_gateway_api_key: SecretStr = SecretStr("")
     # SourceCreate rejects text above 200k, so a larger limit here would have no effect.
     max_source_chars: int = Field(default=20_000, gt=0, le=200_000)
     max_cards: int = Field(default=20, gt=0, le=1_000)
@@ -63,6 +66,24 @@ class Settings(BaseSettings):
         # An allowlist, not "not production": an unexpected ENV must not switch auth off.
         if self.auth_mode == "dev" and self.env not in ("development", "test"):
             raise ValueError("AUTH_MODE=dev is only allowed when ENV is development or test")
+        return self
+
+    @model_validator(mode="after")
+    def ai_generation_needs_a_model(self) -> Self:
+        if self.card_generator == "ai" and not self.ai_model.strip():
+            raise ValueError("AI_MODEL is required for AI generation")
+        return self
+
+    @model_validator(mode="after")
+    def gateway_model_needs_a_key(self) -> Self:
+        # Fail at start-up, not on the first generation request. The check stays narrow:
+        # direct models such as openai:... read their own environment variables instead.
+        if (
+            self.card_generator == "ai"
+            and self.ai_model.startswith("gateway/")
+            and not self.pydantic_ai_gateway_api_key.get_secret_value()
+        ):
+            raise ValueError("PYDANTIC_AI_GATEWAY_API_KEY is required for gateway/ models")
         return self
 
 

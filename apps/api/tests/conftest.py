@@ -24,12 +24,17 @@ os.environ["ENV"] = "test"
 os.environ["AUTH_MODE"] = "dev"
 # Hard override: a dev DATABASE_URL exported by `just`/dotenv must never leak into tests.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# The default CARD_GENERATOR=ai now fails fast without a gateway key. A placeholder keeps
+# start-up validation happy; real model requests stay disabled below, and the app fixture
+# uses FakeCardGenerator.
+os.environ["PYDANTIC_AI_GATEWAY_API_KEY"] = "pylf_v1_eu_test-not-a-real-key"
 
 from collections.abc import AsyncIterator, Callable  # noqa: E402
 
 import pytest  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from pydantic_ai import models  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine  # noqa: E402
 
 from app.api.deps import get_card_generator  # noqa: E402
@@ -37,6 +42,9 @@ from app.core.config import Settings, get_settings  # noqa: E402
 from app.core.db import get_session  # noqa: E402
 from app.generation.fake import FakeCardGenerator  # noqa: E402
 from app.main import create_app  # noqa: E402
+
+# Belt and braces: any accidental real model request in a test fails loudly.
+models.ALLOW_MODEL_REQUESTS = False
 
 
 @pytest.fixture(scope="session", autouse=True)

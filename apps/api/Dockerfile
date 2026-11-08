@@ -6,12 +6,35 @@
 ARG PYTHON_VERSION=3.13
 
 # ---------------------------------------------------------------------------
-# Stage 1: resolve and install dependencies into /app/.venv with uv
+# Stage 1: uv, downloaded and checksum-verified (no registry auth required)
+# ---------------------------------------------------------------------------
+FROM debian:trixie-slim AS uv
+ARG UV_VERSION=0.13.4
+ARG UV_SHA256_AMD64=2b428396f12572d4429cf210ca234dd599a33b3af0958a4d5ed569d63e3f344f
+ARG UV_SHA256_ARM64=1ae72b4718729e2ccc4f1ae2c6d1e531ca8467800e0546e9130b3886023a60ab
+ARG TARGETARCH
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && case "${TARGETARCH:-amd64}" in \
+    amd64) arch="x86_64"; sum="${UV_SHA256_AMD64}" ;; \
+    arm64) arch="aarch64"; sum="${UV_SHA256_ARM64}" ;; \
+    *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/uv.tgz \
+    "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${arch}-unknown-linux-gnu.tar.gz" \
+    && echo "${sum}  /tmp/uv.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/uv.tgz -C /usr/local/bin --strip-components=1 \
+    "uv-${arch}-unknown-linux-gnu/uv" "uv-${arch}-unknown-linux-gnu/uvx" \
+    && /usr/local/bin/uv --version
+
+# ---------------------------------------------------------------------------
+# Stage 2: resolve and install dependencies into /app/.venv with uv
 # ---------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim AS builder
 
-# uv is copied from its official image, pinned, so builds are reproducible.
-COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /uvx /bin/
+COPY --from=uv /usr/local/bin/uv /usr/local/bin/uvx /bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -31,12 +54,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
 
 # ---------------------------------------------------------------------------
-# Stage 2: Infisical CLI, downloaded and checksum-verified (optional at runtime)
+# Stage 3: Infisical CLI, downloaded and checksum-verified (optional at runtime)
 # ---------------------------------------------------------------------------
 FROM debian:trixie-slim AS infisical
-ARG INFISICAL_VERSION=0.44.12
-ARG INFISICAL_SHA256_AMD64=82cad3d11fb34e9a90772a803e538a2bc8e5dfe99a8b135fa352b9f0eae2ae9a
-ARG INFISICAL_SHA256_ARM64=03f45146e1769cbee33aa4a00bb277ab9d7d953eb7cd026462578720d7d98d72
+# Grype also scans the Go modules inside this binary, so pin a release whose dependencies
+# are patched (v0.45.4: brotli 1.2.8, klauspost/compress 1.20.3).
+ARG INFISICAL_VERSION=0.45.4
+ARG INFISICAL_SHA256_AMD64=107389f4c9a0cc48023a834bb2a5bf1280c0a0e45ea7a98d13807d4def21b0a5
+ARG INFISICAL_SHA256_ARM64=fcfd91de70efdedc7f8c1b1d90a024b433bb185387fe32467d49625a3bf55379
 ARG TARGETARCH
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # hadolint ignore=DL3008
@@ -54,7 +79,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && /usr/local/bin/infisical --version
 
 # ---------------------------------------------------------------------------
-# Stage 3: runtime. No uv, no compilers, no dev dependencies, non-root user.
+# Stage 4: runtime. No uv, no compilers, no dev dependencies, non-root user.
 # ---------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim AS runtime
 

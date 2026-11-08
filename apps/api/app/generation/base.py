@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class CardDraft(BaseModel):
     question: str = Field(min_length=1)
     answer: str = Field(min_length=1)
-    source_excerpt: str = Field(min_length=1)
+    source_excerpt: str | None = None  # a verbatim passage from the Source, if we have one
 
 
 class GenerationError(Exception):
