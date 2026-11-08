@@ -67,7 +67,7 @@ class Source(TimestampMixin, Base):
 
 class Card(TimestampMixin, Base):
     __tablename__: str = "cards"
-    __table_args__ = (Index("ix_cards_owner_due", "owner_id", "due_at"),)
+    __table_args__: tuple[Index, ...] = (Index("ix_cards_owner_due", "owner_id", "due_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[uuid.UUID] = mapped_column(

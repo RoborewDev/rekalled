@@ -50,7 +50,7 @@ test-web:
 test: test-api test-web
 
 lint:
-    cd apps/api && uv run ruff check . && uv run ruff format --check . && uv run mypy app
+    cd apps/api && uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run basedpyright --project ../../pyrightconfig.json
     cd apps/web && vp check
 
 # Build both production images locally with the same Dockerfiles CI uses

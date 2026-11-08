@@ -78,7 +78,7 @@ jobs:
         run: find . -name '*.sh' -not -path '*/node_modules/*' -print0 | xargs -0 -r shellcheck
 
   api:
-    name: API (ruff, mypy, pytest, migrations, audit)
+    name: API (ruff, mypy, basedpyright, pytest, migrations, audit)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -115,6 +115,7 @@ jobs:
       - run: uv run ruff check --output-format=github .
       - run: uv run ruff format --check .
       - run: uv run mypy app
+      - run: uv run basedpyright --project ../../pyrightconfig.json
       - run: uv run pytest
       - name: Migrations match the models (no missing autogenerate)
         run: uv run alembic check

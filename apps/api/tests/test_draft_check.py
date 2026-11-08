@@ -1,7 +1,13 @@
+from httpx import AsyncClient
+
+from tests.api_types import ActiveCardJson, KeptDraftJson, json_list, json_object
+from tests.conftest import Clock
 from tests.helpers import make_deck, make_source
 
 
-async def test_commit_keeps_edits_and_deletes_unticked_drafts(client, clock):
+async def test_commit_keeps_edits_and_deletes_unticked_drafts(
+    client: AsyncClient, clock: Clock
+) -> None:
     deck_id = await make_deck(client)
     source = await make_source(client, deck_id)
     first, second, _third = source["cards"]
@@ -17,19 +23,19 @@ async def test_commit_keeps_edits_and_deletes_unticked_drafts(client, clock):
     )
 
     assert response.status_code == 200
-    active = response.json()
+    active = json_list(response, ActiveCardJson)
     assert [c["question"] for c in active] == ["Edited?", second["question"]]
     # New Active cards are due straight away and have no Memory score yet.
-    assert all(c["due_at"] == "2026-11-02T09:00:00Z" for c in active)
+    assert all(c["due_at"] == clock.now.isoformat().replace("+00:00", "Z") for c in active)
     assert all(c["memory_score"] is None for c in active)
-    deck_cards = (await client.get(f"/v1/decks/{deck_id}/cards")).json()
+    deck_cards = json_list(await client.get(f"/v1/decks/{deck_id}/cards"), ActiveCardJson)
     assert len(deck_cards) == 2
 
 
-async def test_committing_twice_is_harmless(client):
+async def test_committing_twice_is_harmless(client: AsyncClient) -> None:
     deck_id = await make_deck(client)
     source = await make_source(client, deck_id)
-    body = {
+    body: dict[str, list[KeptDraftJson]] = {
         "kept": [
             {"card_id": c["id"], "question": c["question"], "answer": c["answer"]}
             for c in source["cards"]
@@ -39,30 +45,33 @@ async def test_committing_twice_is_harmless(client):
     first = await client.post(f"/v1/sources/{source['id']}/drafts/commit", json=body)
     second = await client.post(f"/v1/sources/{source['id']}/drafts/commit", json=body)
 
-    assert len(first.json()) == len(second.json()) == 3
+    assert len(json_list(first, ActiveCardJson)) == len(json_list(second, ActiveCardJson)) == 3
 
 
-async def test_edit_and_delete_an_active_card(client):
+async def test_edit_and_delete_an_active_card(client: AsyncClient) -> None:
     deck_id = await make_deck(client)
     source = await make_source(client, deck_id)
     card = source["cards"][0]
-    await client.post(
+    _ = await client.post(
         f"/v1/sources/{source['id']}/drafts/commit",
         json={"kept": [{"card_id": card["id"], "question": "Q", "answer": "A"}]},
     )
 
-    edited = await client.patch(f"/v1/cards/{card['id']}", json={"answer": "Better answer"})
-    assert edited.json()["answer"] == "Better answer"
+    edited = json_object(
+        await client.patch(f"/v1/cards/{card['id']}", json={"answer": "Better answer"}),
+        ActiveCardJson,
+    )
+    assert edited["answer"] == "Better answer"
 
     assert (await client.delete(f"/v1/cards/{card['id']}")).status_code == 204
-    assert (await client.get(f"/v1/decks/{deck_id}/cards")).json() == []
+    assert json_list(await client.get(f"/v1/decks/{deck_id}/cards"), ActiveCardJson) == []
 
 
-async def test_overlong_card_text_is_rejected(client):
+async def test_overlong_card_text_is_rejected(client: AsyncClient) -> None:
     deck_id = await make_deck(client)
     source = await make_source(client, deck_id)
     card = source["cards"][0]
-    too_long = {"card_id": card["id"], "question": "Q", "answer": "x" * 2_001}
+    too_long: KeptDraftJson = {"card_id": card["id"], "question": "Q", "answer": "x" * 2_001}
 
     commit = await client.post(
         f"/v1/sources/{source['id']}/drafts/commit", json={"kept": [too_long]}
@@ -73,7 +82,7 @@ async def test_overlong_card_text_is_rejected(client):
     assert edit.status_code == 422
 
 
-async def test_other_users_cannot_commit_or_edit_my_cards(client):
+async def test_other_users_cannot_commit_or_edit_my_cards(client: AsyncClient) -> None:
     other = {"X-Dev-User": "dev|other"}
     deck_id = await make_deck(client)
     source = await make_source(client, deck_id)

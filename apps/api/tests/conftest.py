@@ -89,7 +89,7 @@ class Clock:
     """A controllable 'now'. Tests move time with clock.advance(days=3)."""
 
     def __init__(self) -> None:
-        self.now = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
+        self.now: datetime = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
 
     def advance(self, **delta: float) -> None:
         self.now += timedelta(**delta)

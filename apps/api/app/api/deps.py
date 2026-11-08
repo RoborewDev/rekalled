@@ -23,10 +23,11 @@ def get_card_generator(settings: SettingsDep) -> CardGenerator:
         return FakeCardGenerator()
     return LlmCardGenerator.from_settings(settings)
 
+
 def get_scheduler(settings: SettingsDep) -> Scheduler:
     return Scheduler(fuzzing=settings.fsrs_fuzzing)
- 
- 
+
+
 SchedulerDep = Annotated[Scheduler, Depends(get_scheduler)]
 
 CardGeneratorDep = Annotated[CardGenerator, Depends(get_card_generator)]
