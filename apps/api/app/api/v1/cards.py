@@ -10,7 +10,11 @@ from app.services import cards as card_service
 router = APIRouter(tags=["cards"])
 
 
-@router.post("/sources/{source_id}/drafts/commit", dependencies=[require_scope("decks:write")])
+@router.post(
+    "/sources/{source_id}/drafts/commit",
+    dependencies=[require_scope("decks:write")],
+    responses={404: {"description": "Source not found"}},
+)
 async def commit_drafts(
     source_id: uuid.UUID,
     body: DraftCommit,

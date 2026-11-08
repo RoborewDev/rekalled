@@ -1,6 +1,8 @@
+from datetime import datetime
+
 from httpx import AsyncClient
 
-from tests.api_types import ActiveCardJson, KeptDraftJson, json_list, json_object
+from tests.api_types import ActiveCardJson, KeptDraftJson, SourceJson, json_list, json_object
 from tests.conftest import Clock
 from tests.helpers import make_deck, make_source
 
@@ -26,7 +28,7 @@ async def test_commit_keeps_edits_and_deletes_unticked_drafts(
     active = json_list(response, ActiveCardJson)
     assert [c["question"] for c in active] == ["Edited?", second["question"]]
     # New Active cards are due straight away and have no Memory score yet.
-    assert all(c["due_at"] == clock.now.isoformat().replace("+00:00", "Z") for c in active)
+    assert all(datetime.fromisoformat(c["due_at"]) == clock.now for c in active)
     assert all(c["memory_score"] is None for c in active)
     deck_cards = json_list(await client.get(f"/v1/decks/{deck_id}/cards"), ActiveCardJson)
     assert len(deck_cards) == 2
@@ -95,3 +97,43 @@ async def test_other_users_cannot_commit_or_edit_my_cards(client: AsyncClient) -
 
     assert commit.status_code == 404
     assert edit.status_code == 404
+
+
+async def test_own_draft_cards_cannot_be_edited_or_deleted(client: AsyncClient) -> None:
+    deck_id = await make_deck(client)
+    source = await make_source(client, deck_id)
+    card = source["cards"][0]
+
+    edit = await client.patch(f"/v1/cards/{card['id']}", json={"answer": "Too early"})
+    delete = await client.delete(f"/v1/cards/{card['id']}")
+
+    # A draft has no memory state, so it is not editable: 404, never a 500.
+    assert edit.status_code == 404
+    assert delete.status_code == 404
+    still_drafts = json_object(await client.get(f"/v1/sources/{source['id']}"), SourceJson)
+    assert [c["status"] for c in still_drafts["cards"]] == ["draft", "draft", "draft"]
+
+    # Nothing was changed, so the draft check still commits the draft as it stands.
+    committed = await client.post(
+        f"/v1/sources/{source['id']}/drafts/commit",
+        json={
+            "kept": [
+                {"card_id": card["id"], "question": card["question"], "answer": card["answer"]}
+            ]
+        },
+    )
+    assert [c["question"] for c in json_list(committed, ActiveCardJson)] == [card["question"]]
+
+
+async def test_an_empty_patch_is_rejected(client: AsyncClient) -> None:
+    deck_id = await make_deck(client)
+    source = await make_source(client, deck_id)
+    card = source["cards"][0]
+    _ = await client.post(
+        f"/v1/sources/{source['id']}/drafts/commit",
+        json={"kept": [{"card_id": card["id"], "question": "Q", "answer": "A"}]},
+    )
+
+    response = await client.patch(f"/v1/cards/{card['id']}", json={})
+
+    assert response.status_code == 422

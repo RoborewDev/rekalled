@@ -24,8 +24,9 @@ async def commit_drafts(
 ) -> list[Card]:
     """The draft check, in one transaction. Running it twice is harmless."""
     source = await get_source(session, user, source_id)
+    # Lock the drafts so two concurrent commits cannot both decide what to keep.
     drafts = await session.scalars(
-        select(Card).where(Card.source_id == source.id, Card.status == "draft")
+        select(Card).where(Card.source_id == source.id, Card.status == "draft").with_for_update()
     )
     edits = {k.card_id: k for k in kept}
 
@@ -57,8 +58,13 @@ async def list_active_cards(session: AsyncSession, user: User, deck_id: uuid.UUI
     return list(result)
 
 
-async def get_card(session: AsyncSession, user: User, card_id: uuid.UUID) -> Card:
-    card = await session.scalar(select(Card).where(Card.id == card_id, Card.owner_id == user.id))
+async def get_card(
+    session: AsyncSession, user: User, card_id: uuid.UUID, *, status: str = "active"
+) -> Card:
+    """Load a card the user may edit. Drafts are excluded: they have no memory state yet."""
+    card = await session.scalar(
+        select(Card).where(Card.id == card_id, Card.owner_id == user.id, Card.status == status)
+    )
     if card is None:
         raise NotFoundError("Card not found")
     return card

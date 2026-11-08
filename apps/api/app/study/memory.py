@@ -3,7 +3,9 @@ from app.study.scheduler import MemoryState
 
 
 def memory_of(card: Card) -> MemoryState:
-    assert card.fsrs_state is not None and card.due_at is not None, "drafts have no memory"
+    # Not an assert: asserts vanish under `python -O`, leaving a draft to reach here as None.
+    if card.fsrs_state is None or card.due_at is None:
+        raise ValueError("drafts have no memory")
     return MemoryState(
         state=card.fsrs_state,
         step=card.fsrs_step,
