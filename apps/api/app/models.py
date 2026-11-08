@@ -94,3 +94,23 @@ class Card(TimestampMixin, Base):
     last_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reps: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     lapses: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class ReviewLog(Base):
+    """Append-only. The id comes from the client, which makes POST /v1/reviews idempotent."""
+
+    __tablename__ = "review_logs"
+    __table_args__ = (Index("ix_review_logs_owner_reviewed", "owner_id", "reviewed_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cards.id", ondelete="CASCADE"), index=True
+    )
+    rating: Mapped[int] = mapped_column(SmallInteger)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Snapshot of the card after this review, for debugging and future FSRS tuning.
+    fsrs_state: Mapped[int] = mapped_column(SmallInteger)
+    stability: Mapped[float | None] = mapped_column(Float)
+    difficulty: Mapped[float | None] = mapped_column(Float)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
