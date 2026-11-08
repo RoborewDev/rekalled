@@ -30,11 +30,15 @@ dev: env-files
 migrate: env-files
     cd apps/api && uv run alembic upgrade head
 
-# Fresh worktree, one command: env files, deps, db, migrations, then both apps.
-# Every step is idempotent, so re-running picks up where it left off.
-start: install db migrate dev
+# Fresh worktree, one command: env files, fresh Infisical pull, deps, db,
+# migrations, then both apps. Every step is idempotent, so re-running picks up
+# where it left off. Note: the pull means `start` needs the infisical CLI and
+# network access even in a worktree (where env-files alone would just copy).
+start: install import-env db migrate dev
 
-import-env:
+# Pull the latest secrets from Infisical into .env.local. env-files first so a
+# fresh worktree gets the INFISICAL_* bootstrap vars in .env before pulling.
+import-env: env-files
     ./scripts/env-pull.sh
 
 # Create a migration from model changes: just revision "add decks"
