@@ -17,6 +17,7 @@ trap cleanup EXIT
 # slices add required settings (e.g. LOGTO_*), add harmless placeholder values here.
 docker run -d --name rekalled-api-smoke --network host \
   -e ENV=production -e AUTH_MODE=logto -e PORT=8000 \
+  -e PYDANTIC_AI_GATEWAY_API_KEY=pylf_v1_eu_smoke-not-a-real-key \
   -e DATABASE_URL="${SMOKE_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/rekalled_smoke}" \
   "$api_image" >/dev/null
 docker run -d --name rekalled-web-smoke --network host -e PORT=3000 "$web_image" >/dev/null

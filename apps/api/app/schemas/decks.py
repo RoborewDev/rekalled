@@ -15,7 +15,6 @@ class DeckUpdate(BaseModel):
 
 class DeckOut(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     name: str
     created_at: datetime
