@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.study.scheduler import Scheduler
+from app.study.scheduler import Scheduler, is_lapse
 
 AGAIN, HARD, GOOD, EASY = 1, 2, 3, 4
 NOW = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
@@ -75,3 +75,12 @@ def test_non_utc_times_are_accepted(scheduler: Scheduler):
     card = scheduler.review(scheduler.new_card(london), GOOD, london)
 
     assert card.due_at == NOW + timedelta(minutes=10)
+
+
+def test_only_again_on_a_learned_card_is_a_lapse(scheduler: Scheduler):
+    learning = scheduler.new_card(NOW)
+    learned = scheduler.review(learning, EASY, NOW)  # Easy graduates straight to Review
+
+    assert is_lapse(learned, AGAIN)
+    assert not is_lapse(learned, HARD)
+    assert not is_lapse(learning, AGAIN)

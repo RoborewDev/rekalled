@@ -15,6 +15,10 @@ class NotFoundError(DomainError):
     status_code: int = 404
 
 
+class ConflictError(DomainError):
+    status_code: int = 409
+
+
 class SourceTooLongError(DomainError):
     status_code: int = 413
 

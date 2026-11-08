@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Spaced repetition. Fuzzing spreads due dates a little; tests turn it off.
     fsrs_fuzzing: bool = True
     new_cards_per_session: int = 10
+    # Safety cap, not a daily limit: a large backlog would otherwise mean thousands of
+    # FSRS previews and a huge response per queue request. The most overdue cards come first.
+    due_cards_per_session: int = Field(default=200, gt=0)
     # Which commit this process was built from. The Dockerfile bakes it in as GIT_SHA, and
     # /v1/health reports it so a deploy can prove the new image is the one serving traffic.
     git_sha: str = "local"

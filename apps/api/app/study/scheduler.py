@@ -51,6 +51,11 @@ class Scheduler:
         return self._fsrs.get_card_retrievability(_to_fsrs(memory), _utc(now))
 
 
+def is_lapse(before: MemoryState, rating: int) -> bool:
+    """Forgetting a card you had learned: Again on a card in the Review state."""
+    return rating == fsrs.Rating.Again.value and before.state == fsrs.State.Review.value
+
+
 def _utc(dt: datetime) -> datetime:
     # py-fsrs only accepts UTC. Callers can pass any aware datetime.
     if dt.tzinfo is None:

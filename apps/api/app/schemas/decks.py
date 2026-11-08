@@ -4,6 +4,8 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.study import DeckStats
+
 
 class DeckCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
@@ -18,3 +20,7 @@ class DeckOut(BaseModel):
     id: uuid.UUID
     name: str
     created_at: datetime
+
+
+class DeckWithStats(DeckOut):
+    stats: DeckStats
