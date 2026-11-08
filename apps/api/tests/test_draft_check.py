@@ -137,3 +137,21 @@ async def test_an_empty_patch_is_rejected(client: AsyncClient) -> None:
     response = await client.patch(f"/v1/cards/{card['id']}", json={})
 
     assert response.status_code == 422
+
+
+async def test_commit_rejects_card_ids_from_another_source(client: AsyncClient) -> None:
+    deck_id = await make_deck(client)
+    mine = await make_source(client, deck_id)
+    other = await make_source(client, deck_id)
+
+    response = await client.post(
+        f"/v1/sources/{mine['id']}/drafts/commit",
+        json={"kept": [{"card_id": other["cards"][0]["id"], "question": "Q", "answer": "A"}]},
+    )
+
+    assert response.status_code == 400
+    # Nothing was activated or deleted: both sources keep all their drafts.
+    mine_after = json_object(await client.get(f"/v1/sources/{mine['id']}"), SourceJson)
+    other_after = json_object(await client.get(f"/v1/sources/{other['id']}"), SourceJson)
+    assert [c["status"] for c in mine_after["cards"]] == ["draft", "draft", "draft"]
+    assert [c["status"] for c in other_after["cards"]] == ["draft", "draft", "draft"]

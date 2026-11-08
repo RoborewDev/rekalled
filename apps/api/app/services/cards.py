@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import NotFoundError
+from app.core.errors import DomainError, NotFoundError
 from app.models import Card, User
 from app.schemas.cards import ActiveCardOut, CardUpdate, KeptDraft
 from app.services.decks import get_deck
@@ -25,9 +25,24 @@ async def commit_drafts(
     """The draft check, in one transaction. Running it twice is harmless."""
     source = await get_source(session, user, source_id)
     # Lock the drafts so two concurrent commits cannot both decide what to keep.
-    drafts = await session.scalars(
-        select(Card).where(Card.source_id == source.id, Card.status == "draft").with_for_update()
+    drafts = list(
+        await session.scalars(
+            select(Card)
+            .where(Card.source_id == source.id, Card.status == "draft")
+            .with_for_update()
+        )
     )
+    # A retried commit lists cards the first run already activated; they are not unknown.
+    already_active = set(
+        await session.scalars(
+            select(Card.id).where(Card.source_id == source.id, Card.status == "active")
+        )
+    )
+    unknown = {k.card_id for k in kept} - {card.id for card in drafts} - already_active
+    if unknown:
+        # Reject before deleting anything, so a bad request cannot destroy drafts.
+        raise DomainError("Some kept cards are not drafts of this source")
+
     edits = {k.card_id: k for k in kept}
 
     for card in drafts:
