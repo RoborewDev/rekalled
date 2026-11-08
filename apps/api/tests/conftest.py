@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,11 +38,13 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from pydantic_ai import models  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine  # noqa: E402
 
-from app.api.deps import get_card_generator  # noqa: E402
+from app.api.deps import get_card_generator, get_scheduler  # noqa: E402
+from app.core.clock import get_now  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.core.db import get_session  # noqa: E402
 from app.generation.fake import FakeCardGenerator  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.study.scheduler import Scheduler  # noqa: E402
 
 # Belt and braces: any accidental real model request in a test fails loudly.
 models.ALLOW_MODEL_REQUESTS = False
@@ -82,11 +85,28 @@ async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
         await trans.rollback()
 
 
+class Clock:
+    """A controllable 'now'. Tests move time with clock.advance(days=3)."""
+
+    def __init__(self) -> None:
+        self.now: datetime = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
+
+    def advance(self, **delta: float) -> None:
+        self.now += timedelta(**delta)
+
+
 @pytest.fixture
-def app() -> FastAPI:
+def clock() -> Clock:
+    return Clock()
+
+
+@pytest.fixture
+def app(clock: Clock) -> FastAPI:
     app = create_app()
     # Never call a real LLM in tests. Individual tests can override this again.
     app.dependency_overrides[get_card_generator] = FakeCardGenerator
+    app.dependency_overrides[get_scheduler] = lambda: Scheduler(fuzzing=False)
+    app.dependency_overrides[get_now] = lambda: clock.now
     return app
 
 

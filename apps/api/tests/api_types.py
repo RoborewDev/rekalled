@@ -31,6 +31,25 @@ class SourceJson(TypedDict):
     cards: list[CardJson]
 
 
+class ActiveCardJson(TypedDict):
+    id: str
+    deck_id: str
+    source_id: str | None
+    question: str
+    answer: str
+    source_excerpt: str | None
+    due_at: str
+    reps: int
+    lapses: int
+    memory_score: float | None
+
+
+class KeptDraftJson(TypedDict):
+    card_id: str
+    question: str
+    answer: str
+
+
 class MeJson(TypedDict):
     id: str
     email: str | None

@@ -1,4 +1,7 @@
 {
+  // Pinned so Zed's BasedPyright and `just lint` / CI report the same diagnostics.
+  // "recommended" is BasedPyright's default; stating it keeps behaviour stable across versions.
+  "typeCheckingMode": "recommended",
   "venvPath": ".",
   "venv": "apps/api/.venv",
   "pythonVersion": "3.13",
