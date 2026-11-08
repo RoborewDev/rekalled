@@ -69,6 +69,12 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def ai_generation_needs_a_model(self) -> Self:
+        if self.card_generator == "ai" and not self.ai_model.strip():
+            raise ValueError("AI_MODEL is required for AI generation")
+        return self
+
+    @model_validator(mode="after")
     def gateway_model_needs_a_key(self) -> Self:
         # Fail at start-up, not on the first generation request. The check stays narrow:
         # direct models such as openai:... read their own environment variables instead.

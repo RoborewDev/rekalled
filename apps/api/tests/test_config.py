@@ -148,6 +148,34 @@ def test_gateway_models_require_the_gateway_key() -> None:
         )
 
 
+def test_ai_generation_requires_a_model() -> None:
+    with pytest.raises(ValidationError, match="AI_MODEL is required"):
+        _ = Settings.model_validate(
+            {
+                "_env_file": None,
+                "database_url": SECRET_URL,
+                "auth_mode": "dev",
+                "card_generator": "ai",
+                "ai_model": "",
+            }
+        )
+
+
+def test_the_fake_generator_accepts_an_empty_model() -> None:
+    settings = Settings.model_validate(
+        {
+            "_env_file": None,
+            "database_url": SECRET_URL,
+            "auth_mode": "dev",
+            "card_generator": "fake",
+            "ai_model": "",
+            "pydantic_ai_gateway_api_key": "",
+        }
+    )
+
+    assert settings.card_generator == "fake"
+
+
 def test_direct_models_do_not_require_the_gateway_key() -> None:
     settings = Settings.model_validate(
         {
