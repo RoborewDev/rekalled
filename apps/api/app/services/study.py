@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import NotFoundError
+from app.core.errors import ConflictError, NotFoundError
 from app.models import Card, Deck, ReviewLog, User
 from app.schemas.study import DeckStats, StudyCard, StudySummary
 from app.study.memory import apply_memory, memory_of
@@ -19,6 +19,7 @@ async def get_queue(
     *,
     deck_id: uuid.UUID | None,
     new_limit: int,
+    due_limit: int,
     scheduler: Scheduler,
     now: datetime,
 ) -> list[StudyCard]:
@@ -32,7 +33,9 @@ async def get_queue(
         base = base.where(Card.deck_id == deck_id)
 
     due = await session.execute(
-        base.where(Card.last_review_at.is_not(None), Card.due_at <= now).order_by(Card.due_at)
+        base.where(Card.last_review_at.is_not(None), Card.due_at <= now)
+        .order_by(Card.due_at)
+        .limit(due_limit)
     )
     new = await session.execute(
         base.where(Card.last_review_at.is_(None))
@@ -73,6 +76,7 @@ async def submit_review(
             rating=rating,
             reviewed_at=now,
             fsrs_state=after.state,
+            fsrs_step=after.step,
             stability=after.stability,
             difficulty=after.difficulty,
             due_at=after.due_at,
@@ -81,7 +85,13 @@ async def submit_review(
         .returning(ReviewLog.id)
     )
     if inserted is None:
-        # Seen this review_id before: a retry. Return the card unchanged.
+        # Seen this review_id before. Retries resend the same payload, so a different one
+        # is a client bug: reject it instead of silently dropping the review.
+        existing = await session.scalar(select(ReviewLog).where(ReviewLog.id == review_id))
+        if existing is None:
+            raise ConflictError("Review id is already in use")
+        if (existing.owner_id, existing.card_id, existing.rating) != (user.id, card_id, rating):
+            raise ConflictError("Review id is already used by a different review")
         await session.commit()
         return card
 

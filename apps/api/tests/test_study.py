@@ -1,7 +1,9 @@
 import uuid
+from collections.abc import Callable
 
 from httpx import AsyncClient, Response
 
+from app.core.config import Settings
 from tests.api_types import ActiveCardJson, StudyCardJson, json_list, json_object
 from tests.conftest import Clock
 from tests.helpers import make_active_cards
@@ -72,6 +74,21 @@ async def test_new_cards_are_limited_per_session(client: AsyncClient) -> None:
     assert len(queue) == 10
 
 
+async def test_due_cards_are_limited_per_session_and_keep_the_most_overdue(
+    client: AsyncClient, clock: Clock, override_settings: Callable[..., Settings]
+) -> None:
+    _, cards = await make_active_cards(client)
+    _ = await review(client, cards[0]["id"], EASY)
+    clock.advance(days=1)
+    _ = await review(client, cards[1]["id"], EASY)
+    clock.advance(days=8)  # both due now; cards[0] is a day more overdue
+
+    _ = override_settings(due_cards_per_session=1)
+    queue = json_list(await client.get("/v1/study/queue"), StudyCardJson)
+
+    assert [c["id"] for c in queue] == [cards[0]["id"], cards[2]["id"]]
+
+
 async def test_queue_can_be_filtered_to_one_deck(client: AsyncClient) -> None:
     deck_a, _ = await make_active_cards(client, deck_name="A")
     _ = await make_active_cards(client, deck_name="B")
@@ -92,6 +109,28 @@ async def test_repeating_a_review_id_changes_nothing(client: AsyncClient) -> Non
 
     assert retry == first
     assert retry["reps"] == 1
+
+
+async def test_reusing_a_review_id_for_another_card_is_a_conflict(client: AsyncClient) -> None:
+    _, cards = await make_active_cards(client)
+    review_id = str(uuid.uuid4())
+    _ = await review(client, cards[0]["id"], GOOD, review_id)
+
+    response = await review(client, cards[1]["id"], GOOD, review_id)
+
+    assert response.status_code == 409
+
+
+async def test_reusing_a_review_id_with_another_rating_is_a_conflict(
+    client: AsyncClient,
+) -> None:
+    _, cards = await make_active_cards(client)
+    review_id = str(uuid.uuid4())
+    _ = await review(client, cards[0]["id"], GOOD, review_id)
+
+    response = await review(client, cards[0]["id"], EASY, review_id)
+
+    assert response.status_code == 409
 
 
 async def test_rating_must_be_between_1_and_4(client: AsyncClient) -> None:

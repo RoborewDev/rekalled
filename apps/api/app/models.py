@@ -112,7 +112,9 @@ class ReviewLog(Base):
     rating: Mapped[int] = mapped_column(SmallInteger)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # Snapshot of the card after this review, for debugging and future FSRS tuning.
+    # step is required to replay Learning and Relearning states; it is null in Review.
     fsrs_state: Mapped[int] = mapped_column(SmallInteger)
+    fsrs_step: Mapped[int | None] = mapped_column(SmallInteger)
     stability: Mapped[float | None] = mapped_column(Float)
     difficulty: Mapped[float | None] = mapped_column(Float)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

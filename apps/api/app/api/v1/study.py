@@ -26,6 +26,7 @@ async def get_study_queue(
         user,
         deck_id=deck_id,
         new_limit=settings.new_cards_per_session,
+        due_limit=settings.due_cards_per_session,
         scheduler=scheduler,
         now=now,
     )
