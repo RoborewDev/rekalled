@@ -1,13 +1,13 @@
 import uuid
 from datetime import datetime
 
-from app.schemas.study import StudyCard
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFoundError
 from app.models import Card, Deck, ReviewLog, User
+from app.schemas.study import StudyCard
 from app.study.memory import apply_memory, memory_of
 from app.study.scheduler import Scheduler, is_lapse
 

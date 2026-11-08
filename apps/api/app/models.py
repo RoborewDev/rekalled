@@ -99,8 +99,10 @@ class Card(TimestampMixin, Base):
 class ReviewLog(Base):
     """Append-only. The id comes from the client, which makes POST /v1/reviews idempotent."""
 
-    __tablename__ = "review_logs"
-    __table_args__ = (Index("ix_review_logs_owner_reviewed", "owner_id", "reviewed_at"),)
+    __tablename__: str = "review_logs"
+    __table_args__: tuple[Index, ...] = (
+        Index("ix_review_logs_owner_reviewed", "owner_id", "reviewed_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))

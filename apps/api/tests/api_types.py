@@ -44,6 +44,19 @@ class ActiveCardJson(TypedDict):
     memory_score: float | None
 
 
+class StudyCardJson(TypedDict):
+    id: str
+    deck_id: str
+    deck_name: str
+    question: str
+    answer: str
+    source_excerpt: str | None
+    is_new: bool
+    memory_score: float | None
+    # Keys are the rating, "1".."4".
+    next_due: dict[str, str]
+
+
 class KeptDraftJson(TypedDict):
     card_id: str
     question: str
