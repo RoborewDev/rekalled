@@ -57,6 +57,34 @@ class StudyCardJson(TypedDict):
     next_due: dict[str, str]
 
 
+class BandsJson(TypedDict):
+    strong: int
+    fading: int
+    weak: int
+    new: int
+
+
+class DeckStatsJson(TypedDict):
+    score: float | None
+    due: int
+    new: int
+    total: int
+    bands: BandsJson
+
+
+class DeckWithStatsJson(DeckJson):
+    stats: DeckStatsJson
+
+
+class StudySummaryJson(TypedDict):
+    score: float | None
+    due: int
+    new: int
+    studied: int
+    reviews_today: int
+    forecast_7d: list[int]
+
+
 class KeptDraftJson(TypedDict):
     card_id: str
     question: str

@@ -108,13 +108,14 @@ def _study_card(card: Card, deck_name: str, scheduler: Scheduler, now: datetime)
         next_due={str(r): due for r, due in scheduler.preview(memory, now).items()},
     )
 
+
 async def _active_cards(session: AsyncSession, user: User) -> list[Card]:
     result = await session.scalars(
         select(Card).where(Card.owner_id == user.id, Card.status == "active")
     )
     return list(result)
- 
- 
+
+
 async def stats_by_deck(
     session: AsyncSession, user: User, scheduler: Scheduler, now: datetime
 ) -> dict[uuid.UUID, DeckStats]:
@@ -124,8 +125,8 @@ async def stats_by_deck(
     for card in await _active_cards(session, user):
         by_deck[card.deck_id].append(card)
     return {deck_id: deck_stats(cards, scheduler, now) for deck_id, cards in by_deck.items()}
- 
- 
+
+
 async def summary(
     session: AsyncSession, user: User, scheduler: Scheduler, now: datetime
 ) -> StudySummary:
