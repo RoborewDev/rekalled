@@ -46,6 +46,15 @@ def test_errors_do_not_echo_the_input(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "S3cretPW" not in str(exc.value)
 
 
+def test_settings_errors_do_not_echo_the_gateway_key(monkeypatch):
+    monkeypatch.setenv("PYDANTIC_AI_GATEWAY_API_KEY", "pylf_canary_key")
+
+    with pytest.raises(ValidationError) as exc:
+        Settings(_env_file=None, env="production", auth_mode="dev")
+
+    assert "pylf_canary_key" not in str(exc.value)
+
+
 def test_env_files_do_not_depend_on_the_working_directory(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

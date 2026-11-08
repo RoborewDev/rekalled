@@ -29,6 +29,9 @@ class Settings(BaseSettings):
 
     # Card generation. "fake" needs no API key: handy for frontend work and E2E.
     card_generator: Literal["ai", "fake"] = "ai"
+    # A Pydantic AI model string. "gateway/" routes through Pydantic AI Gateway.
+    ai_model: str = "gateway/openai:gpt-5.4-mini"
+    pydantic_ai_gateway_api_key: SecretStr = SecretStr("")
     # SourceCreate rejects text above 200k, so a larger limit here would have no effect.
     max_source_chars: int = Field(default=20_000, gt=0, le=200_000)
     max_cards: int = Field(default=20, gt=0, le=1_000)
