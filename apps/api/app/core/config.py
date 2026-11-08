@@ -68,6 +68,18 @@ class Settings(BaseSettings):
             raise ValueError("AUTH_MODE=dev is only allowed when ENV is development or test")
         return self
 
+    @model_validator(mode="after")
+    def gateway_model_needs_a_key(self) -> Self:
+        # Fail at start-up, not on the first generation request. The check stays narrow:
+        # direct models such as openai:... read their own environment variables instead.
+        if (
+            self.card_generator == "ai"
+            and self.ai_model.startswith("gateway/")
+            and not self.pydantic_ai_gateway_api_key.get_secret_value()
+        ):
+            raise ValueError("PYDANTIC_AI_GATEWAY_API_KEY is required for gateway/ models")
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:

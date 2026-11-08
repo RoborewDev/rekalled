@@ -2,7 +2,7 @@
 
 import re
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import AgentRunError
 from pydantic_ai.models import Model
@@ -29,6 +29,17 @@ class _ModelCard(BaseModel):
     question: str = Field(min_length=1)
     answer: str = Field(min_length=1)
     source_excerpt: str
+
+    @field_validator("question", "answer")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        # min_length counts characters, so a whitespace-only value passes. Rejecting it
+        # here makes the agent retry; exhausted retries become GenerationError (502),
+        # whereas letting CardDraft reject it would raise a raw ValidationError (500).
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be blank")
+        return stripped
 
 
 class _ModelOutput(BaseModel):
@@ -58,8 +69,8 @@ class LlmCardGenerator:
 
         return [
             CardDraft(
-                question=card.question.strip(),
-                answer=card.answer.strip(),
+                question=card.question,
+                answer=card.answer,
                 source_excerpt=card.source_excerpt
                 if _appears_in(card.source_excerpt, text)
                 else None,
@@ -68,9 +79,14 @@ class LlmCardGenerator:
         ]
 
 
+_CLOSING_FENCE = re.compile(r"</material>", re.IGNORECASE)
+
+
 def build_prompt(text: str) -> str:
-    # Pasted or imported text is untrusted: fence it off from the instructions.
-    return f"<material>\n{text}\n</material>"
+    # Pasted or imported text is untrusted: fence it off from the instructions, and
+    # neutralise any closing tag inside it so the data region cannot be ended early.
+    escaped = _CLOSING_FENCE.sub("&lt;/material&gt;", text)
+    return f"<material>\n{escaped}\n</material>"
 
 
 def _normalise(s: str) -> str:

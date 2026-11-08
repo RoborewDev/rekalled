@@ -24,6 +24,10 @@ os.environ["ENV"] = "test"
 os.environ["AUTH_MODE"] = "dev"
 # Hard override: a dev DATABASE_URL exported by `just`/dotenv must never leak into tests.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# The default CARD_GENERATOR=ai now fails fast without a gateway key. A placeholder keeps
+# start-up validation happy; real model requests stay disabled below, and the app fixture
+# uses FakeCardGenerator.
+os.environ["PYDANTIC_AI_GATEWAY_API_KEY"] = "pylf_v1_eu_test-not-a-real-key"
 
 from collections.abc import AsyncIterator, Callable  # noqa: E402
 

@@ -31,4 +31,10 @@ async def test_x_dev_user_header_acts_as_a_different_user(client: AsyncClient) -
 
 def test_dev_auth_is_refused_in_production(test_database_url: str) -> None:
     with pytest.raises(ValidationError):
-        _ = Settings(env="production", database_url=SecretStr(test_database_url), auth_mode="dev")
+        # card_generator=fake keeps the gateway-key validator out of this failure.
+        _ = Settings(
+            env="production",
+            database_url=SecretStr(test_database_url),
+            auth_mode="dev",
+            card_generator="fake",
+        )

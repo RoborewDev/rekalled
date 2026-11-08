@@ -100,6 +100,9 @@ jobs:
       AUTH_MODE: dev
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/rekalled_test
       TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/rekalled_test
+      # Harmless placeholder: start-up validation requires a gateway key for the default
+      # ai generator. Tests never call a real model (conftest disables model requests).
+      PYDANTIC_AI_GATEWAY_API_KEY: pylf_v1_eu_ci-not-a-real-key
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -111,18 +111,6 @@ async def test_generation_errors_do_not_leak_provider_details(
     assert "secret-from-provider" not in response.text
 
 
-async def test_ai_generator_returns_503_until_implemented(
-    client: AsyncClient, app: FastAPI, override_settings: Callable[..., Settings]
-) -> None:
-    _ = app.dependency_overrides.pop(get_card_generator, None)
-    _ = override_settings(card_generator="ai")
-    deck_id = await make_deck(client)
-
-    response = await client.post(f"/v1/decks/{deck_id}/sources", json={"text": TEXT})
-
-    assert response.status_code == 503
-
-
 async def test_cannot_add_a_source_to_someone_elses_deck(client: AsyncClient) -> None:
     deck_id = await make_deck(client)
 

@@ -34,9 +34,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Stage 2: Infisical CLI, downloaded and checksum-verified (optional at runtime)
 # ---------------------------------------------------------------------------
 FROM debian:trixie-slim AS infisical
-ARG INFISICAL_VERSION=0.44.12
-ARG INFISICAL_SHA256_AMD64=82cad3d11fb34e9a90772a803e538a2bc8e5dfe99a8b135fa352b9f0eae2ae9a
-ARG INFISICAL_SHA256_ARM64=03f45146e1769cbee33aa4a00bb277ab9d7d953eb7cd026462578720d7d98d72
+# Grype also scans the Go modules inside this binary, so pin a release whose dependencies
+# are patched (v0.45.4: brotli 1.2.8, klauspost/compress 1.20.3).
+ARG INFISICAL_VERSION=0.45.4
+ARG INFISICAL_SHA256_AMD64=107389f4c9a0cc48023a834bb2a5bf1280c0a0e45ea7a98d13807d4def21b0a5
+ARG INFISICAL_SHA256_ARM64=fcfd91de70efdedc7f8c1b1d90a024b433bb185387fe32467d49625a3bf55379
 ARG TARGETARCH
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # hadolint ignore=DL3008
