@@ -30,13 +30,17 @@ from collections.abc import AsyncIterator, Callable  # noqa: E402
 import pytest  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from pydantic_ai import models  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine  # noqa: E402
 
-from app.routes.deps import get_card_generator  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.core.db import get_session  # noqa: E402
 from app.generation.fake import FakeCardGenerator  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.api.deps import get_card_generator  # noqa: E402
+
+# Belt and braces: any accidental real model request in a test fails loudly.
+models.ALLOW_MODEL_REQUESTS = False
 
 
 @pytest.fixture(scope="session", autouse=True)

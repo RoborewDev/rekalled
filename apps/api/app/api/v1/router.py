@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.routes.v1 import decks, health, me, sources
+from app.api.v1 import decks, health, me, sources
 
 api_router = APIRouter(prefix="/v1")
 api_router.include_router(health.router)

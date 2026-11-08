@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, require_scope
 from app.models import Source
-from app.routes.deps import CardGeneratorDep, SessionDep, SettingsDep
+from app.api.deps import CardGeneratorDep, SessionDep, SettingsDep
 from app.schemas.sources import CardOut, SourceCreate, SourceOut
 from app.services import generation
 

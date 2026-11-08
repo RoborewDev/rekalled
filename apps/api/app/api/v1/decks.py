@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, status
 
-from app.routes.deps import SessionDep
+from app.api.deps import SessionDep
 from app.auth.dependencies import CurrentUser, require_scope
 from app.schemas.decks import DeckCreate, DeckOut, DeckUpdate
 from app.services import decks as deck_service
