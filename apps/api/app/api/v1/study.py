@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from app.api.deps import NowDep, SchedulerDep, SessionDep, SettingsDep
 from app.auth.dependencies import CurrentUser, require_scope
 from app.schemas.cards import ActiveCardOut
-from app.schemas.study import ReviewCreate, StudyCard
+from app.schemas.study import ReviewCreate, StudyCard, StudySummary
 from app.services import study as study_service
 from app.services.cards import to_active_card_out
 
@@ -45,3 +45,10 @@ async def submit_review(
         now=now,
     )
     return to_active_card_out(card, scheduler, now)
+
+
+@router.get("/study/summary", dependencies=[require_scope("decks:read")])
+async def get_study_summary(
+    session: SessionDep, user: CurrentUser, scheduler: SchedulerDep, now: NowDep
+) -> StudySummary:
+    return await study_service.summary(session, user, scheduler, now)

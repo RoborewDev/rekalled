@@ -1,15 +1,16 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFoundError
 from app.models import Card, Deck, ReviewLog, User
-from app.schemas.study import StudyCard
+from app.schemas.study import DeckStats, StudyCard, StudySummary
 from app.study.memory import apply_memory, memory_of
 from app.study.scheduler import Scheduler, is_lapse
+from app.study.scores import deck_stats, forecast
 
 
 async def get_queue(
@@ -105,4 +106,42 @@ def _study_card(card: Card, deck_name: str, scheduler: Scheduler, now: datetime)
         is_new=card.last_review_at is None,
         memory_score=scheduler.retrievability(memory, now),
         next_due={str(r): due for r, due in scheduler.preview(memory, now).items()},
+    )
+
+async def _active_cards(session: AsyncSession, user: User) -> list[Card]:
+    result = await session.scalars(
+        select(Card).where(Card.owner_id == user.id, Card.status == "active")
+    )
+    return list(result)
+ 
+ 
+async def stats_by_deck(
+    session: AsyncSession, user: User, scheduler: Scheduler, now: datetime
+) -> dict[uuid.UUID, DeckStats]:
+    """Stats for every deck the user owns, including decks with no cards yet."""
+    deck_ids = await session.scalars(select(Deck.id).where(Deck.owner_id == user.id))
+    by_deck: dict[uuid.UUID, list[Card]] = {deck_id: [] for deck_id in deck_ids}
+    for card in await _active_cards(session, user):
+        by_deck[card.deck_id].append(card)
+    return {deck_id: deck_stats(cards, scheduler, now) for deck_id, cards in by_deck.items()}
+ 
+ 
+async def summary(
+    session: AsyncSession, user: User, scheduler: Scheduler, now: datetime
+) -> StudySummary:
+    cards = await _active_cards(session, user)
+    overall = deck_stats(cards, scheduler, now)
+    start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    reviews_today = await session.scalar(
+        select(func.count())
+        .select_from(ReviewLog)
+        .where(ReviewLog.owner_id == user.id, ReviewLog.reviewed_at >= start_of_today)
+    )
+    return StudySummary(
+        score=overall.score,
+        due=overall.due,
+        new=overall.new,
+        studied=overall.total - overall.new,
+        reviews_today=reviews_today or 0,
+        forecast_7d=forecast(cards, now),
     )

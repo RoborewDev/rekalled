@@ -2,10 +2,11 @@ import uuid
 
 from fastapi import APIRouter, status
 
-from app.api.deps import SessionDep
+from app.api.deps import NowDep, SchedulerDep, SessionDep
 from app.auth.dependencies import CurrentUser, require_scope
-from app.schemas.decks import DeckCreate, DeckOut, DeckUpdate
+from app.schemas.decks import DeckCreate, DeckOut, DeckUpdate, DeckWithStats
 from app.services import decks as deck_service
+from app.services import study as study_service
 
 router = APIRouter(prefix="/decks", tags=["decks"])
 
@@ -14,9 +15,15 @@ write = [require_scope("decks:write")]
 
 
 @router.get("", dependencies=read)
-async def list_decks(session: SessionDep, user: CurrentUser) -> list[DeckOut]:
+async def list_decks(
+    session: SessionDep, user: CurrentUser, scheduler: SchedulerDep, now: NowDep
+) -> list[DeckWithStats]:
     decks = await deck_service.list_decks(session, user)
-    return [DeckOut.model_validate(d) for d in decks]
+    stats = await study_service.stats_by_deck(session, user, scheduler, now)
+    return [
+        DeckWithStats(id=d.id, name=d.name, created_at=d.created_at, stats=stats[d.id])
+        for d in decks
+    ]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, dependencies=write)
