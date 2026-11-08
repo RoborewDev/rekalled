@@ -134,7 +134,11 @@ def test_generation_settings_have_safe_defaults(monkeypatch: pytest.MonkeyPatch)
     assert settings.max_sources_per_day == 50
 
 
-def test_due_cards_per_session_defaults_to_200() -> None:
+def test_due_cards_per_session_defaults_to_200(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in list(os.environ):
+        if key.casefold() == "due_cards_per_session":
+            monkeypatch.delenv(key, raising=False)
+
     settings = Settings.model_validate(
         {"_env_file": None, "database_url": SECRET_URL, "auth_mode": "dev"}
     )
