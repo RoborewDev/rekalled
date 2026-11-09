@@ -13,10 +13,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ENV=production on purpose: staging and production run the same validators. When later
-# slices add required settings (e.g. LOGTO_*), add harmless placeholder values here.
+# ENV=production on purpose: staging and production run the same validators. The LOGTO_*
+# values are non-empty placeholders: Settings requires them in logto mode, but the JWKS
+# client only fetches keys when a token arrives, and this smoke test never sends one.
 docker run -d --name rekalled-api-smoke --network host \
   -e ENV=production -e AUTH_MODE=logto -e PORT=8000 \
+  -e LOGTO_ENDPOINT=https://logto-smoke.invalid \
+  -e LOGTO_API_RESOURCE=https://api-smoke.invalid \
+  -e LOGTO_APP_ID=smoke-app-id \
   -e PYDANTIC_AI_GATEWAY_API_KEY=pylf_v1_eu_smoke-not-a-real-key \
   -e DATABASE_URL="${SMOKE_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/rekalled_smoke}" \
   "$api_image" >/dev/null
