@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/gen/index.ts",
-    "./query": "./src/gen/@tanstack/react-query.gen.ts"
+    "./query": "./src/gen/@tanstack/react-query.gen.ts",
+    "./client": "./src/gen/client.gen.ts"
   },
   "scripts": {
     "generate": "openapi-ts"

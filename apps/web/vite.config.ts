@@ -16,13 +16,17 @@ const config = defineConfig({
     options: { typeAware: true, typeCheck: true },
   },
   resolve: { tsconfigPaths: true },
-  plugins: lazyPlugins(() => [
-    devtools(),
-    nitro({ rollupConfig: { external: [/^@sentry\//] } }),
-    tailwindcss(),
-    tanstackStart(),
-    viteReact(),
-  ]),
+  test: { include: ["src/**/*.test.{ts,tsx}"] },
+  // Unit tests are plain TS: skip the app plugins (Start, Nitro) so Vitest exits cleanly.
+  plugins: process.env.VITEST
+    ? []
+    : lazyPlugins(() => [
+        devtools(),
+        nitro({ rollupConfig: { external: [/^@sentry\//] } }),
+        tailwindcss(),
+        tanstackStart(),
+        viteReact(),
+      ]),
 });
 
 export default config;
