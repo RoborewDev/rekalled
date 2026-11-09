@@ -92,6 +92,8 @@ In Infisical, set `ENV=production`, `AUTH_MODE=logto` and the environment's `DAT
 
 Keep secrets out of the web image. Any public configuration that differs between environments must be supplied at runtime, not baked into `VITE_*` build settings.
 
+On each web app, set `API_URL` to that environment's public API origin (for example `https://api.rekalled.app`). The web server reads it at request time via a server function, so the promoted image needs no rebuild and no `VITE_*` value. A production container started without `API_URL` shows a clear configuration error instead of calling the wrong origin.
+
 ## Migrations and checks
 
 - API startup runs `alembic upgrade head` under a PostgreSQL advisory lock.

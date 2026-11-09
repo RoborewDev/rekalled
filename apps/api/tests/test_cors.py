@@ -36,6 +36,8 @@ def production_settings(**changes: object) -> Settings:
             "logto_endpoint": "https://tenant.logto.app",
             "logto_api_resource": "https://api.rekalled.app",
             "logto_app_id": "spa-app-id",
+            # The default is a localhost origin, which production refuses on purpose.
+            "cors_origins": ["https://rekalled.app"],
             **changes,
         }
     )
@@ -60,5 +62,5 @@ async def test_docs_and_schema_are_off_in_production():
 
 
 def test_wildcard_cors_is_refused_in_production():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="CORS_ORIGINS must list real origins"):
         _ = production_settings(cors_origins=["*"])

@@ -351,3 +351,68 @@ def test_an_unparseable_database_url_is_refused_without_echoing_it() -> None:
         )
 
     assert "S3cretPW" not in str(exc.value)
+
+
+def _production_settings(**changes: object) -> Settings:
+    return Settings.model_validate(
+        {
+            "_env_file": None,
+            "env": "production",
+            "auth_mode": "logto",
+            "database_url": SECRET_URL,
+            "logto_endpoint": "https://tenant.logto.app",
+            "logto_api_resource": "https://api.rekalled.app",
+            "logto_app_id": "spa-app-id",
+            "cors_origins": ["https://rekalled.app"],
+            **changes,
+        }
+    )
+
+
+def test_cors_origins_default_to_the_local_web_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CORS_ORIGINS", raising=False)
+
+    settings = Settings.model_validate(
+        {"_env_file": None, "database_url": SECRET_URL, "auth_mode": "dev"}
+    )
+
+    assert settings.cors_origins == ["http://localhost:3000"]
+
+
+def test_cors_origins_are_parsed_as_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CORS_ORIGINS", '["https://rekalled.app", "https://www.rekalled.app"]')
+
+    settings = Settings.model_validate(
+        {"_env_file": None, "database_url": SECRET_URL, "auth_mode": "dev"}
+    )
+
+    assert settings.cors_origins == ["https://rekalled.app", "https://www.rekalled.app"]
+
+
+@pytest.mark.parametrize(
+    "origins",
+    [
+        ["*"],  # wildcard
+        [],  # a deploy that forgot CORS_ORIGINS would otherwise block the frontend
+        ["http://localhost:3000"],
+        ["http://127.0.0.1:3000"],
+        ["http://[::1]:3000"],
+    ],
+)
+def test_production_refuses_unsafe_cors_origins(origins: list[str]) -> None:
+    with pytest.raises(ValidationError, match="CORS_ORIGINS"):
+        _ = _production_settings(cors_origins=origins)
+
+
+def test_localhost_cors_origins_are_allowed_outside_production() -> None:
+    settings = Settings.model_validate(
+        {
+            "_env_file": None,
+            "env": "development",
+            "database_url": SECRET_URL,
+            "auth_mode": "dev",
+            "cors_origins": ["http://localhost:3000"],
+        }
+    )
+
+    assert settings.cors_origins == ["http://localhost:3000"]

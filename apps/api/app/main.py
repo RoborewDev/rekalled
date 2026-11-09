@@ -35,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="Rekalled API",
         # Gives the generated TS client names like listDecks, not list_decks_v1_decks_get.
         generate_unique_id_function=unique_id,
+        lifespan=lifespan,
         docs_url="/docs" if docs else None,
         redoc_url="/redoc" if docs else None,
         openapi_url="/openapi.json" if docs else None,

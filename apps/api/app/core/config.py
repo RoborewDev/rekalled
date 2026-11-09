@@ -107,9 +107,16 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def no_wildcard_cors_in_production(self) -> Self:
-        if self.env == "production" and "*" in self.cors_origins:
-            raise ValueError("CORS_ORIGINS must list real origins in production, not *")
+    def real_cors_origins_in_production(self) -> Self:
+        # A missing, wildcard or localhost origin would either expose the API to any site or
+        # block the real frontend; both only show up later as an opaque browser CORS error.
+        if self.env != "production":
+            return self
+        if not self.cors_origins or "*" in self.cors_origins:
+            raise ValueError("CORS_ORIGINS must list real origins in production, not * or empty")
+        local = ("localhost", "127.0.0.1", "::1")
+        if any(urlsplit(origin).hostname in local for origin in self.cors_origins):
+            raise ValueError("CORS_ORIGINS must not contain localhost origins in production")
         return self
 
     @property

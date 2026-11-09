@@ -15,6 +15,15 @@ function StudyToday() {
   const summary = useQuery(getStudySummaryOptions());
   const decks = useQuery(listDecksOptions());
 
+  // A failed request looks like an empty account otherwise: no due cards and no decks.
+  if (summary.isError || decks.isError) {
+    return (
+      <p role="alert" className="text-sm text-red">
+        Could not load your study data. Reload the page to try again.
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <section className="panel flex flex-wrap items-center justify-between gap-4">
@@ -65,23 +74,30 @@ function NewDeckForm() {
   });
 
   return (
-    <form
-      className="flex gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        create.mutate({ body: { name } });
-      }}
-    >
-      <input
-        className="field"
-        placeholder="New deck name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        required
-      />
-      <button className="btn" disabled={create.isPending}>
-        Create
-      </button>
-    </form>
+    <div className="space-y-2">
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          create.mutate({ body: { name } });
+        }}
+      >
+        <input
+          className="field"
+          placeholder="New deck name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+        <button className="btn" disabled={create.isPending}>
+          Create
+        </button>
+      </form>
+      {create.isError && (
+        <p role="alert" className="text-sm text-red">
+          Could not create the deck. Try again.
+        </p>
+      )}
+    </div>
   );
 }
