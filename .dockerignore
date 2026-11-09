@@ -1,0 +1,23 @@
+# Applies to image builds whose context is the repo root (the web image, see
+# apps/web/Dockerfile). The API image builds with apps/api as its context and
+# uses apps/api/.dockerignore instead.
+.git
+.github
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.output
+**/.nitro
+**/.tanstack
+**/dist
+**/coverage
+**/e2e
+**/test-results
+**/playwright-report
+.env
+.env.*
+**/.env
+**/.env.*

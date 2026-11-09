@@ -119,6 +119,25 @@ jobs:
       - run: uv run pytest
       - name: Migrations match the models (no missing autogenerate)
         run: uv run alembic check
+
+      # Mirrors `just gen-client`: regenerate from source and fail if the committed
+      # snapshot in packages/api-client (schema or generated client) has drifted.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Committed API client is not stale (regenerate and diff)
+        working-directory: .
+        run: |
+          pnpm install --frozen-lockfile
+          (cd apps/api && uv run python -m scripts.export_openapi)
+          pnpm --filter @rekalled/api-client generate
+          git diff --exit-code -- packages/api-client
+
       - name: Known vulnerabilities in runtime dependencies
         run: uv audit --locked --no-dev
 
@@ -140,7 +159,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          cache-dependency-path: apps/web/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vp check
       - run: pnpm exec vp test run --passWithNoTests
@@ -185,7 +204,7 @@ jobs:
       - name: Build web image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: apps/web
+          context: .
           file: apps/web/Dockerfile
           load: true
           push: false
