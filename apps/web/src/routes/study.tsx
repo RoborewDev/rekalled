@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useState } from "react";
 import type { StudyCard } from "@rekalled/api-client";
 import { getStudyQueueOptions, submitReviewMutation } from "@rekalled/api-client/query";
 import { opId } from "#/lib/query-keys";
@@ -23,10 +23,12 @@ export const Route = createFileRoute("/study")({
 
 function StudyPage() {
   const { deckId } = Route.useSearch();
-  // The queue is a snapshot for this session: don't refetch it under the user.
+  // The queue is a snapshot for this visit: don't refetch it under the user, and
+  // don't hand the same cards to a later visit (gcTime: 0 drops the cache on unmount).
   const queue = useQuery({
     ...getStudyQueueOptions({ query: { deck_id: deckId } }),
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
   });
 
@@ -45,6 +47,7 @@ const RATINGS: { rating: Rating; label: string }[] = [
 function Session({ cards }: { cards: StudyCard[] }) {
   const [state, dispatch] = useReducer(sessionReducer, cards, startSession);
   const card = currentCard(state);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const review = useMutation({
     ...submitReviewMutation(),
@@ -55,10 +58,20 @@ function Session({ cards }: { cards: StudyCard[] }) {
   });
 
   const rate = (rating: Rating) => {
-    if (!card) return;
-    // review_id makes the POST idempotent: a retried request is not counted twice.
-    review.mutate({ body: { review_id: crypto.randomUUID(), card_id: card.id, rating } });
-    dispatch({ type: "rate", rating, now: new Date() });
+    if (!card || review.isPending) return;
+    const now = new Date();
+    setSubmitError(null);
+    // Only advance once the server has recorded the review, so a failed POST leaves
+    // the card in the queue instead of silently dropping it.
+    review.mutate(
+      // review_id makes the POST idempotent: a retried request is not counted twice.
+      { body: { review_id: crypto.randomUUID(), card_id: card.id, rating } },
+      {
+        onSuccess: () => dispatch({ type: "rate", rating, now }),
+        onError: () =>
+          setSubmitError("Couldn't save that review. Check your connection and try again."),
+      },
+    );
   };
 
   useEffect(() => {
@@ -112,17 +125,25 @@ function Session({ cards }: { cards: StudyCard[] }) {
         )}
       </article>
       {state.revealed && (
-        <div className="grid grid-cols-4 gap-2">
-          {RATINGS.map(({ rating, label }) => (
-            <button key={rating} className="btn flex-col" onClick={() => rate(rating)}>
-              <span>
-                {label} <kbd className="hidden text-xs opacity-70 sm:inline">{rating}</kbd>
-              </span>
-              <span className="text-xs text-ink-soft">
-                {formatDue(card!.next_due[String(rating)])}
-              </span>
-            </button>
-          ))}
+        <div className="space-y-2">
+          <div className="grid grid-cols-4 gap-2">
+            {RATINGS.map(({ rating, label }) => (
+              <button
+                key={rating}
+                className="btn flex-col disabled:opacity-60"
+                disabled={review.isPending}
+                onClick={() => rate(rating)}
+              >
+                <span>
+                  {label} <kbd className="hidden text-xs opacity-70 sm:inline">{rating}</kbd>
+                </span>
+                <span className="text-xs text-ink-soft">
+                  {formatDue(card!.next_due[String(rating)])}
+                </span>
+              </button>
+            ))}
+          </div>
+          {submitError && <p className="text-sm text-red">{submitError}</p>}
         </div>
       )}
     </div>
