@@ -16,8 +16,10 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     _ = get_settings()
     yield
 
+
 def unique_id(route: APIRoute) -> str:
     return route.name
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
