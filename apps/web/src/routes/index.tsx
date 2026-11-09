@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -45,7 +45,13 @@ function StudyToday() {
         {decks.data?.map((deck) => (
           <div key={deck.id} className="panel space-y-3">
             <div className="flex items-center justify-between gap-4">
-              <h3 className="text-lg font-semibold hover:underline">{deck.name}</h3>
+              <Link
+                to="/decks/$deckId"
+                params={{ deckId: deck.id }}
+                className="text-lg font-semibold hover:underline"
+              >
+                {deck.name}
+              </Link>
               <Score value={deck.stats.score} />
             </div>
             <BandsBar bands={deck.stats.bands} />
@@ -65,11 +71,13 @@ function StudyToday() {
 function NewDeckForm() {
   const [name, setName] = useState("");
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
   const create = useMutation({
     ...createDeckMutation(),
-    onSuccess: () => {
-      setName("");
-      return queryClient.invalidateQueries({ queryKey: listDecksQueryKey() });
+    onSuccess: async (deck) => {
+      await queryClient.invalidateQueries({ queryKey: listDecksQueryKey() });
+      await navigate({ to: "/decks/$deckId", params: { deckId: deck.id } });
     },
   });
 
