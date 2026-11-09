@@ -1,0 +1,26 @@
+import type { AuthMode } from "#/auth/types";
+
+export type RuntimeConfig = { apiUrl: string; authMode: AuthMode };
+
+const DEV_API_URL = "http://localhost:8000";
+
+/**
+ * Resolve the public runtime config from the web server's environment. Kept separate from the
+ * server function so it can be unit tested without the Start compiler.
+ */
+export function resolveRuntimeConfig(env: Record<string, string | undefined>): RuntimeConfig {
+  const dev = env.NODE_ENV !== "production";
+
+  // Production must say where the API is; the local default only saves dev setup.
+  const apiUrl = env.API_URL?.trim() || (dev ? DEV_API_URL : "");
+  if (!apiUrl) throw new Error("API_URL must be set for the web server");
+
+  // The browser auth adapter is a deployment setting too, so it is read here rather than
+  // baked into the bundle. Local dev defaults to the dev adapter.
+  const authMode = env.AUTH_MODE?.trim() || (dev ? "dev" : "");
+  if (authMode !== "dev" && authMode !== "logto") {
+    throw new Error("AUTH_MODE must be dev or logto for the web server");
+  }
+
+  return { apiUrl, authMode };
+}

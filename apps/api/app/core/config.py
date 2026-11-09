@@ -106,6 +106,34 @@ class Settings(BaseSettings):
             )
         return self
 
+    @field_validator("cors_origins")
+    @classmethod
+    def cors_origins_are_origins(cls, value: list[str]) -> list[str]:
+        # Fail fast on anything a browser Origin header can never match: a missing scheme or
+        # host, a path/query/fragment, user info, or an invalid port. "*" is allowed here and
+        # refused in production below, so dev can still be permissive.
+        for origin in value:
+            if origin == "*":
+                continue
+            url = urlsplit(origin)
+            try:
+                _ = url.port
+            except ValueError:
+                raise ValueError("CORS_ORIGINS entries must use a valid port") from None
+            if (
+                url.scheme not in ("http", "https")
+                or not url.hostname
+                or url.path
+                or url.query
+                or url.fragment
+                or url.username is not None
+                or url.password is not None
+            ):
+                raise ValueError(
+                    "CORS_ORIGINS entries must be origins such as https://app.rekalled.app"
+                )
+        return value
+
     @model_validator(mode="after")
     def real_cors_origins_in_production(self) -> Self:
         # A missing, wildcard or localhost origin would either expose the API to any site or
@@ -115,15 +143,8 @@ class Settings(BaseSettings):
         if not self.cors_origins or "*" in self.cors_origins:
             raise ValueError("CORS_ORIGINS must list real origins in production, not * or empty")
         local = ("localhost", "127.0.0.1", "::1")
-        for origin in self.cors_origins:
-            url = urlsplit(origin)
-            # A missing scheme or host would never match a browser Origin header exactly.
-            if url.scheme not in ("http", "https") or not url.hostname:
-                raise ValueError(
-                    "CORS_ORIGINS entries must be origins such as https://app.rekalled.app"
-                )
-            if url.hostname in local:
-                raise ValueError("CORS_ORIGINS must not contain localhost origins in production")
+        if any(urlsplit(origin).hostname in local for origin in self.cors_origins):
+            raise ValueError("CORS_ORIGINS must not contain localhost origins in production")
         return self
 
     @property

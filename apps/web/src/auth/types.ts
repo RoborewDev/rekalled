@@ -1,5 +1,8 @@
 export type AuthUser = { name: string | null };
 
+/** Which auth adapter the browser should use. Chosen at runtime by the web server. */
+export type AuthMode = "dev" | "logto";
+
 export type AuthState = {
   status: "loading" | "signedIn" | "signedOut";
   user: AuthUser | null;

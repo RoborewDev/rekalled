@@ -6,12 +6,12 @@ import {
   createRootRouteWithContext,
   useLocation,
 } from "@tanstack/react-router";
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { AuthProvider, RequireAuth, useAuth } from "#/auth";
 import { configureApi } from "#/lib/api";
-import { getRuntimeConfig } from "#/lib/runtime-config";
+import { RuntimeConfigProvider, useRuntimeConfig } from "#/lib/runtime-config-context";
 import appCss from "../styles.css?url";
 
 interface RouterContext {
@@ -46,10 +46,19 @@ function RootDocument({ children }: { children: ReactNode }) {
   );
 }
 
-// Client-only (defaultSsr: false): auth → API client → layout.
+// Client-only (defaultSsr: false): runtime config → auth → API client → layout.
 function App() {
   return (
-    <AuthProvider>
+    <RuntimeConfigProvider>
+      <ConfiguredApp />
+    </RuntimeConfigProvider>
+  );
+}
+
+function ConfiguredApp() {
+  const { authMode } = useRuntimeConfig();
+  return (
+    <AuthProvider mode={authMode}>
       <ApiClient>
         <Layout />
       </ApiClient>
@@ -59,6 +68,7 @@ function App() {
 
 function ApiClient({ children }: { children: ReactNode }) {
   const auth = useAuth();
+  const { apiUrl } = useRuntimeConfig();
   const latest = useRef(auth);
   // A layout effect keeps the ref current after every commit; writing it during render can
   // leave it pointing at a render React discarded.
@@ -66,33 +76,16 @@ function ApiClient({ children }: { children: ReactNode }) {
     latest.current = auth;
   });
 
-  // Read the API origin from the web server so it is not baked into this bundle.
-  const config = useQuery({
-    queryKey: ["runtime-config"],
-    queryFn: () => getRuntimeConfig(),
-    staleTime: Infinity,
-  });
-
-  // Configure once, before any child query runs; the ref always points at the current auth
-  // state. Configuring twice is harmless: setConfig merges rather than replacing the client.
+  // Configure before any child query runs; the ref always points at the current auth state.
+  // Configuring twice is harmless: setConfig merges rather than replacing the client.
   useMemo(() => {
-    if (!config.data) return;
-    configureApi(config.data.apiUrl, {
+    configureApi(apiUrl, {
       getAccessToken: (options) => latest.current.getAccessToken(options),
       signIn: (returnTo) => latest.current.signIn(returnTo),
     });
-  }, [config.data]);
+  }, [apiUrl]);
 
-  if (config.isError) {
-    return (
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <p role="alert" className="text-sm text-red">
-          Could not load the app configuration. Reload the page to try again.
-        </p>
-      </main>
-    );
-  }
-  return config.data ? children : null;
+  return children;
 }
 
 function Layout() {

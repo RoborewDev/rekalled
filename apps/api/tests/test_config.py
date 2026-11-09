@@ -397,14 +397,51 @@ def test_cors_origins_are_parsed_as_json(monkeypatch: pytest.MonkeyPatch) -> Non
         ["http://localhost:3000"],
         ["http://127.0.0.1:3000"],
         ["http://[::1]:3000"],
-        ["api.rekalled.app"],  # no scheme: never matches a browser Origin
-        ["localhost:3000"],  # no scheme either
-        ["https://"],  # no host
     ],
 )
 def test_production_refuses_unsafe_cors_origins(origins: list[str]) -> None:
     with pytest.raises(ValidationError, match="CORS_ORIGINS"):
         _ = _production_settings(cors_origins=origins)
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "api.rekalled.app",  # no scheme
+        "localhost:3000",  # no scheme either
+        "https://",  # no host
+        "https://rekalled.app/study",  # a path never matches an Origin header
+        "https://rekalled.app/",  # not even a trailing slash
+        "https://rekalled.app?x=1",  # query
+        "https://rekalled.app#top",  # fragment
+        "https://user:pass@rekalled.app",  # user info
+        "https://rekalled.app:notaport",  # unparseable port
+        "https://rekalled.app:99999",  # port out of range
+    ],
+)
+def test_cors_origins_must_be_valid_origins(origin: str) -> None:
+    with pytest.raises(ValidationError, match="CORS_ORIGINS"):
+        _ = Settings.model_validate(
+            {
+                "_env_file": None,
+                "database_url": SECRET_URL,
+                "auth_mode": "dev",
+                "cors_origins": [origin],
+            }
+        )
+
+
+def test_a_wildcard_cors_origin_is_allowed_outside_production() -> None:
+    settings = Settings.model_validate(
+        {
+            "_env_file": None,
+            "database_url": SECRET_URL,
+            "auth_mode": "dev",
+            "cors_origins": ["*"],
+        }
+    )
+
+    assert settings.cors_origins == ["*"]
 
 
 def test_localhost_cors_origins_are_allowed_outside_production() -> None:
