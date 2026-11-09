@@ -57,6 +57,11 @@ lint:
     cd apps/api && uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run basedpyright --project ../../pyrightconfig.json
     cd apps/web && vp check
 
+# Regenerate the typed TS client from FastAPI's OpenAPI schema
+gen-client:
+    cd apps/api && uv run python -m scripts.export_openapi
+    pnpm --filter @rekalled/api-client generate
+
 # Build both production images locally with the same Dockerfiles CI uses
 images:
     docker build -t rekalled-api:local --build-arg GIT_SHA=$(git rev-parse HEAD) apps/api

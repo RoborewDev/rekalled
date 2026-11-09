@@ -1,0 +1,11 @@
+{
+  "name": "rekalled",
+  "private": true,
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.16.1",
+      "onFail": "download"
+    }
+  }
+}
