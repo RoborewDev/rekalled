@@ -397,6 +397,9 @@ def test_cors_origins_are_parsed_as_json(monkeypatch: pytest.MonkeyPatch) -> Non
         ["http://localhost:3000"],
         ["http://127.0.0.1:3000"],
         ["http://[::1]:3000"],
+        ["api.rekalled.app"],  # no scheme: never matches a browser Origin
+        ["localhost:3000"],  # no scheme either
+        ["https://"],  # no host
     ],
 )
 def test_production_refuses_unsafe_cors_origins(origins: list[str]) -> None:

@@ -94,6 +94,8 @@ Keep secrets out of the web image. Any public configuration that differs between
 
 On each web app, set `API_URL` to that environment's public API origin (for example `https://api.rekalled.app`). The web server reads it at request time via a server function, so the promoted image needs no rebuild and no `VITE_*` value. A production container started without `API_URL` shows a clear configuration error instead of calling the wrong origin.
 
+In Infisical, also set `CORS_ORIGINS` to a JSON list of the web app's public origin, such as `["https://app.rekalled.app"]`. The API refuses to start in production when the list is empty, contains `*`, or contains a localhost or scheme-less entry.
+
 ## Migrations and checks
 
 - API startup runs `alembic upgrade head` under a PostgreSQL advisory lock.

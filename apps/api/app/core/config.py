@@ -115,8 +115,15 @@ class Settings(BaseSettings):
         if not self.cors_origins or "*" in self.cors_origins:
             raise ValueError("CORS_ORIGINS must list real origins in production, not * or empty")
         local = ("localhost", "127.0.0.1", "::1")
-        if any(urlsplit(origin).hostname in local for origin in self.cors_origins):
-            raise ValueError("CORS_ORIGINS must not contain localhost origins in production")
+        for origin in self.cors_origins:
+            url = urlsplit(origin)
+            # A missing scheme or host would never match a browser Origin header exactly.
+            if url.scheme not in ("http", "https") or not url.hostname:
+                raise ValueError(
+                    "CORS_ORIGINS entries must be origins such as https://app.rekalled.app"
+                )
+            if url.hostname in local:
+                raise ValueError("CORS_ORIGINS must not contain localhost origins in production")
         return self
 
     @property

@@ -84,12 +84,17 @@ function NewDeckForm() {
       >
         <input
           className="field"
+          name="name"
+          aria-label="New deck name"
           placeholder="New deck name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            if (create.isError) create.reset();
+            setName(e.target.value);
+          }}
           required
         />
-        <button className="btn" disabled={create.isPending}>
+        <button type="submit" className="btn" disabled={create.isPending}>
           Create
         </button>
       </form>
