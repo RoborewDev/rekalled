@@ -40,7 +40,8 @@ class Settings(BaseSettings):
     max_cards: int = Field(default=20, gt=0, le=1_000)
     # Every Source spends model credit, so cap how many one user can add per 24 hours.
     max_sources_per_day: int = Field(default=50, gt=0)
-
+    # Browser origins allowed to call the API. Bearer tokens, no cookies, so no credentials.
+    cors_origins: list[str] = ["http://localhost:3000"]
     # Spaced repetition. Fuzzing spreads due dates a little; tests turn it off.
     fsrs_fuzzing: bool = True
     new_cards_per_session: int = 10
@@ -103,6 +104,12 @@ class Settings(BaseSettings):
             raise ValueError(
                 "AUTH_MODE=logto needs LOGTO_ENDPOINT, LOGTO_API_RESOURCE and LOGTO_APP_ID"
             )
+        return self
+
+    @model_validator(mode="after")
+    def no_wildcard_cors_in_production(self) -> Self:
+        if self.env == "production" and "*" in self.cors_origins:
+            raise ValueError("CORS_ORIGINS must list real origins in production, not *")
         return self
 
     @property
