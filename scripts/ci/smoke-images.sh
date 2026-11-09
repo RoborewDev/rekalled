@@ -14,17 +14,21 @@ cleanup() {
 trap cleanup EXIT
 
 # ENV=production on purpose: staging and production run the same validators. The LOGTO_*
-# values are non-empty placeholders: Settings requires them in logto mode, but the JWKS
-# client only fetches keys when a token arrives, and this smoke test never sends one.
+# and CORS_ORIGINS values are non-empty placeholders: Settings requires the former in logto
+# mode and refuses localhost origins in production, but the JWKS client only fetches keys
+# when a token arrives, and this smoke test never sends one.
 docker run -d --name rekalled-api-smoke --network host \
   -e ENV=production -e AUTH_MODE=logto -e PORT=8000 \
   -e LOGTO_ENDPOINT=https://logto-smoke.invalid \
   -e LOGTO_API_RESOURCE=https://api-smoke.invalid \
   -e LOGTO_APP_ID=smoke-app-id \
+  -e CORS_ORIGINS='["https://web-smoke.invalid"]' \
   -e PYDANTIC_AI_GATEWAY_API_KEY=pylf_v1_eu_smoke-not-a-real-key \
   -e DATABASE_URL="${SMOKE_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/rekalled_smoke}" \
   "$api_image" >/dev/null
-docker run -d --name rekalled-web-smoke --network host -e PORT=3000 "$web_image" >/dev/null
+# The web server reads its API origin at runtime, so set one as Coolify would.
+docker run -d --name rekalled-web-smoke --network host \
+  -e PORT=3000 -e API_URL=http://127.0.0.1:8000 "$web_image" >/dev/null
 
 wait_healthy() { # container
   for _ in $(seq 1 30); do
