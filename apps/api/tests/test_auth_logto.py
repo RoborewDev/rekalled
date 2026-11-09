@@ -14,9 +14,10 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import FastAPI
 from httpx import AsyncClient
+from jwt.algorithms import ECAlgorithm
 
 from app.auth.dependencies import get_token_verifier
-from app.auth.logto import LogtoTokenVerifier
+from app.auth.logto import InvalidTokenError, LogtoTokenVerifier
 from app.core.config import Settings, get_settings
 
 ISSUER = "https://tenant.logto.app/oidc"
@@ -101,6 +102,34 @@ def bearer(t: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {t}"}
 
 
+def jwks(*keys: tuple[str, ec.EllipticCurvePublicKey]) -> dict[str, object]:
+    """A JWKS response shaped like the tenant's, for a mocked PyJWKClient."""
+    return {
+        "keys": [
+            {**ECAlgorithm.to_jwk(public_key, as_dict=True), "kid": kid} for kid, public_key in keys
+        ]
+    }
+
+
+def verifier_from_settings(endpoint: str) -> LogtoTokenVerifier:
+    """Build the verifier the way the app does, from Settings rather than an override."""
+    verifier = get_token_verifier(
+        Settings.model_validate(
+            {
+                "_env_file": None,
+                "env": "test",
+                "auth_mode": "logto",
+                "card_generator": "fake",
+                "logto_endpoint": endpoint,
+                "logto_api_resource": AUDIENCE,
+                "logto_app_id": CLIENT_ID,
+            }
+        )
+    )
+    assert verifier is not None
+    return verifier
+
+
 @pytest.fixture(autouse=True)
 def logto_mode(app: FastAPI) -> None:
     app.dependency_overrides[get_settings] = lambda: Settings.model_validate(
@@ -172,3 +201,40 @@ async def test_dev_header_is_ignored_in_logto_mode(client: AsyncClient) -> None:
     response = await client.get("/v1/me", headers={"X-Dev-User": "dev|local"})
 
     assert response.status_code == 401
+
+
+def test_the_real_resolver_fetches_the_settings_jwks_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fetches: list[str] = []
+
+    def fetch_data(self: jwt.PyJWKClient) -> dict[str, object]:
+        fetches.append(self.uri)
+        return jwks(("test-key", SIGNING_KEY.public_key()))
+
+    monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", fetch_data)
+    verifier = verifier_from_settings("https://resolver.logto.app")
+    signed = token(iss="https://resolver.logto.app/oidc")
+
+    first = verifier.verify(signed)
+    second = verifier.verify(signed)
+
+    assert fetches == ["https://resolver.logto.app/oidc/jwks"]
+    assert first == second
+    assert first.subject == "logto-user-1"
+    assert first.scopes == frozenset({"decks:read", "decks:write", "cards:generate"})
+
+
+def test_a_token_without_a_kid_is_rejected_by_the_real_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fetch_data(_self: jwt.PyJWKClient) -> dict[str, object]:
+        return jwks(("test-key", SIGNING_KEY.public_key()))
+
+    monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", fetch_data)
+    verifier = verifier_from_settings("https://no-kid.logto.app")
+    claims = unsigned_claims() | {"iss": "https://no-kid.logto.app/oidc"}
+    without_kid = jwt.encode(claims, SIGNING_KEY, algorithm="ES384", headers={"typ": "at+jwt"})
+
+    with pytest.raises(InvalidTokenError):
+        _ = verifier.verify(without_kid)

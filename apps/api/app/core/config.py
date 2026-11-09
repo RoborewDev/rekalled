@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import ClassVar, Literal, Self
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -68,6 +69,27 @@ class Settings(BaseSettings):
                 sslmode = sslmode[-1]
             url = url.difference_update_query(["sslmode"]).update_query_dict({"ssl": sslmode})
         return SecretStr(url.render_as_string(hide_password=False))
+
+    @field_validator("logto_endpoint")
+    @classmethod
+    def logto_endpoint_is_a_base_url(cls, value: str) -> str:
+        # A typo here would otherwise mean an opaque 401 on every request instead of a
+        # clear failure at start-up. Empty stays valid: dev mode leaves Logto unused.
+        if not value:
+            return value
+        url = urlsplit(value)
+        # http is allowed only for a local tenant; anything else must be encrypted.
+        local = url.hostname in ("localhost", "127.0.0.1", "::1")
+        if (
+            url.scheme not in ("http", "https")
+            or (url.scheme == "http" and not local)
+            or not url.hostname
+            or url.path not in ("", "/")
+            or url.query
+            or url.fragment
+        ):
+            raise ValueError("LOGTO_ENDPOINT must be a base URL such as https://abc123.logto.app")
+        return value
 
     @model_validator(mode="after")
     def dev_auth_only_in_development(self) -> Self:

@@ -31,12 +31,10 @@ class JwksKeyResolver:
 
 
 class LogtoTokenVerifier:
-    def __init__(
-        self, *, issuer: str, audience: str, client_id: str | None, keys: KeyResolver
-    ) -> None:
+    def __init__(self, *, issuer: str, audience: str, client_id: str, keys: KeyResolver) -> None:
         self._issuer: str = issuer
         self._audience: str = audience
-        self._client_id: str | None = client_id
+        self._client_id: str = client_id
         self._keys: KeyResolver = keys
 
     def verify(self, token: str) -> Principal:
@@ -55,7 +53,8 @@ class LogtoTokenVerifier:
         except (jwt.PyJWTError, KeyError) as exc:
             raise InvalidTokenError(str(exc)) from exc
 
-        if self._client_id and claims.get("client_id") != self._client_id:
+        # Unconditional: a security boundary must not depend on a guard in Settings.
+        if claims.get("client_id") != self._client_id:
             raise InvalidTokenError("Token was issued to a different client")
         sub = claims["sub"]
         scope = claims.get("scope", "")

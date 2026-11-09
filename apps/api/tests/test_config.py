@@ -63,16 +63,59 @@ def test_settings_errors_do_not_echo_the_gateway_key() -> None:
     assert "pylf_canary_key" not in str(exc.value)
 
 
-def test_logto_mode_needs_the_app_id() -> None:
-    with pytest.raises(ValidationError):
+@pytest.mark.parametrize("missing", ["logto_endpoint", "logto_api_resource", "logto_app_id"])
+def test_logto_mode_needs_every_setting(missing: str) -> None:
+    logto: dict[str, str] = {
+        "logto_endpoint": "https://tenant.logto.app",
+        "logto_api_resource": "https://api.rekalled.app",
+        "logto_app_id": "spa-app-id",
+    }
+    del logto[missing]
+
+    with pytest.raises(ValidationError, match="AUTH_MODE=logto needs"):
+        _ = Settings.model_validate({"_env_file": None, "auth_mode": "logto", **logto})
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://tenant.logto.app",  # unencrypted, and not a local tenant
+        "https://",  # no host
+        "https://tenant.logto.app/oidc",  # a path would corrupt the derived issuer
+        "https://tenant.logto.app?x=1",  # likewise a query string
+        "tenant.logto.app",  # no scheme
+    ],
+)
+def test_logto_endpoint_must_be_a_base_url(endpoint: str) -> None:
+    with pytest.raises(ValidationError, match="LOGTO_ENDPOINT must be a base URL"):
         _ = Settings.model_validate(
             {
                 "_env_file": None,
                 "auth_mode": "logto",
-                "logto_endpoint": "https://tenant.logto.app",
+                "card_generator": "fake",
+                "logto_endpoint": endpoint,
                 "logto_api_resource": "https://api.rekalled.app",
+                "logto_app_id": "spa-app-id",
             }
         )
+
+
+@pytest.mark.parametrize(
+    "endpoint", ["https://tenant.logto.app", "https://tenant.logto.app/", "http://localhost:3001"]
+)
+def test_logto_endpoint_accepts_base_urls(endpoint: str) -> None:
+    settings = Settings.model_validate(
+        {
+            "_env_file": None,
+            "auth_mode": "logto",
+            "card_generator": "fake",
+            "logto_endpoint": endpoint,
+            "logto_api_resource": "https://api.rekalled.app",
+            "logto_app_id": "spa-app-id",
+        }
+    )
+
+    assert settings.logto_issuer == f"{endpoint.rstrip('/')}/oidc"
 
 
 def test_env_files_do_not_depend_on_the_working_directory(
