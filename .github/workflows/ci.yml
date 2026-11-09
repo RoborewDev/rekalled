@@ -140,7 +140,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          cache-dependency-path: apps/web/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vp check
       - run: pnpm exec vp test run --passWithNoTests
@@ -185,7 +185,7 @@ jobs:
       - name: Build web image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: apps/web
+          context: .
           file: apps/web/Dockerfile
           load: true
           push: false

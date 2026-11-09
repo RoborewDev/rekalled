@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Rekalled web image (TanStack Start, Nitro node-server output).
 # Built once per commit on main and promoted unchanged to production.
-# Build context: apps/web  (docker build -f apps/web/Dockerfile apps/web)
+# Build context: repo root  (docker build -f apps/web/Dockerfile .)
 #
 # Parity rule: anything read via import.meta.env.VITE_* is inlined at BUILD time, so it is
 # identical in staging and production. Never put a per-environment value in a VITE_ var;
@@ -10,7 +10,10 @@
 ARG NODE_VERSION=24
 
 # ---------------------------------------------------------------------------
-# Stage 1: install and build
+# Stage 1: install and build. The pnpm workspace root is the repo root, so the
+# root manifests plus the package.json of every workspace member the web app
+# needs (apps/web, packages/api-client) are copied before install; the rest of
+# each package follows once the dependency layer is cached.
 # ---------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-slim AS builder
 ARG PNPM_VERSION=12.16.1
@@ -20,11 +23,14 @@ WORKDIR /app
 
 # Lockfile first so the dependency layer is cached until it changes.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/
+COPY packages/api-client/package.json packages/api-client/
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
-COPY . .
-RUN pnpm build
+COPY apps/web apps/web
+COPY packages/api-client packages/api-client
+RUN pnpm --filter web build
 
 # ---------------------------------------------------------------------------
 # Stage 2: runtime. .output is self-contained (Nitro bundles server deps), so no
@@ -41,8 +47,8 @@ ENV NODE_ENV=production \
     GIT_SHA=${GIT_SHA}
 
 WORKDIR /app
-COPY --from=builder --chown=node:node /app/.output ./.output
-COPY --from=builder --chown=node:node /app/docker/healthcheck.mjs ./healthcheck.mjs
+COPY --from=builder --chown=node:node /app/apps/web/.output ./.output
+COPY --from=builder --chown=node:node /app/apps/web/docker/healthcheck.mjs ./healthcheck.mjs
 # Numeric UID/GID of the base image's `node` user (hadolint DL3066).
 USER 1000
 EXPOSE 3000
