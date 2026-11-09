@@ -194,20 +194,20 @@ The 4-day build delivers the architecture, the paste → generate → check → 
 
 ### API contract (prototype)
 
-| Method | Path | Scope | Notes |
-| --- | --- | --- | --- |
-| GET | `/v1/me` | any | id, email, display_name, scopes |
-| GET / POST | `/v1/decks` | read / write | list with Card counts and `stats` (score, due, new, total, bands); create |
-| GET / PATCH / DELETE | `/v1/decks/{id}` | read / write | 404 if not the owner |
-| POST | `/v1/decks/{id}/sources` | `cards:generate` | body `{title?, text}`; creates the Source and runs Generation; returns the Source plus Draft Cards; 413/422 if the text is too long |
-| GET | `/v1/sources/{id}` | read | Source plus its Draft and Active Cards |
-| POST | `/v1/sources/{id}/generate` | `cards:generate` | retry Generation for a Source with no drafts |
-| POST | `/v1/sources/{id}/drafts/commit` | write | commits the draft check in one request |
-| GET | `/v1/decks/{id}/cards` | read | Active Cards, each with `memory_score`, `due_at`, `reps` and `lapses` |
-| GET | `/v1/study/queue?deck_id=` | read | the study queue, each Card with `next_due` previews for ratings 1–4 |
-| POST | `/v1/reviews` | write | body `{review_id, card_id, rating}`; idempotent on `review_id`; returns the updated Card with its new `memory_score` |
-| GET | `/v1/study/summary` | read | overall score, due, new, studied, Reviews today, 7-day forecast |
-| PATCH / DELETE | `/v1/cards/{id}` | write | edit or delete a Card |
+| Method               | Path                             | Scope            | Notes                                                                                                                               |
+| -------------------- | -------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| GET                  | `/v1/me`                         | any              | id, email, display_name, scopes                                                                                                     |
+| GET / POST           | `/v1/decks`                      | read / write     | list with Card counts and `stats` (score, due, new, total, bands); create                                                           |
+| GET / PATCH / DELETE | `/v1/decks/{id}`                 | read / write     | 404 if not the owner                                                                                                                |
+| POST                 | `/v1/decks/{id}/sources`         | `cards:generate` | body `{title?, text}`; creates the Source and runs Generation; returns the Source plus Draft Cards; 413/422 if the text is too long |
+| GET                  | `/v1/sources/{id}`               | read             | Source plus its Draft and Active Cards                                                                                              |
+| POST                 | `/v1/sources/{id}/generate`      | `cards:generate` | retry Generation for a Source with no drafts                                                                                        |
+| POST                 | `/v1/sources/{id}/drafts/commit` | write            | commits the draft check in one request                                                                                              |
+| GET                  | `/v1/decks/{id}/cards`           | read             | Active Cards, each with `memory_score`, `due_at`, `reps` and `lapses`                                                               |
+| GET                  | `/v1/study/queue?deck_id=`       | read             | the study queue, each Card with `next_due` previews for ratings 1–4                                                                 |
+| POST                 | `/v1/reviews`                    | write            | body `{review_id, card_id, rating}`; idempotent on `review_id`; returns the updated Card with its new `memory_score`                |
+| GET                  | `/v1/study/summary`              | read             | overall score, due, new, studied, Reviews today, 7-day forecast                                                                     |
+| PATCH / DELETE       | `/v1/cards/{id}`                 | write            | edit or delete a Card                                                                                                               |
 
 ### CI (GitHub Actions)
 
