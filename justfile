@@ -71,3 +71,7 @@ images:
 # for the throwaway-database prerequisite)
 smoke: images env-files
     bash scripts/ci/smoke-local.sh
+
+# Full loop in a real browser (dev auth + fake generator). Needs `just db` and `just migrate`.
+e2e:
+    cd apps/web && pnpm exec playwright test
