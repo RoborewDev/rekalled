@@ -1,5 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
+
 import { useState } from "react";
 import type { ActiveCardOut } from "@rekalled/api-client";
 import {
@@ -36,6 +37,9 @@ function DeckPage() {
           <Score value={stats.score} size="lg" />
         </div>
         <BandsBar bands={stats.bands} />
+        <Link to="/study" search={{ deckId }} className="btn-primary">
+          Study {stats.due + stats.new} cards
+        </Link>
       </section>
 
       <AddTextForm deckId={deckId} />

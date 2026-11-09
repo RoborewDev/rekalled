@@ -38,6 +38,9 @@ function StudyToday() {
           </p>
           <p className="text-ink-soft">{summary.data?.reviews_today ?? 0} reviews today</p>
         </div>
+        <Link to="/study" className="btn-primary">
+          Study all
+        </Link>
       </section>
 
       <section className="space-y-3">
@@ -59,6 +62,9 @@ function StudyToday() {
               <span className="text-ink-soft">
                 {deck.stats.due} due · {deck.stats.new} new · {deck.stats.total} cards
               </span>
+              <Link to="/study" search={{ deckId: deck.id }} className="btn">
+                Study
+              </Link>
             </div>
           </div>
         ))}
