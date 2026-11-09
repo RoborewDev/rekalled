@@ -63,13 +63,15 @@ def test_settings_errors_do_not_echo_the_gateway_key() -> None:
     assert "pylf_canary_key" not in str(exc.value)
 
 
-def test_logto_mode_needs_the_app_id():
+def test_logto_mode_needs_the_app_id() -> None:
     with pytest.raises(ValidationError):
-        Settings(
-            _env_file=None,
-            auth_mode="logto",
-            logto_endpoint="https://tenant.logto.app",
-            logto_api_resource="https://api.rekalled.app",
+        _ = Settings.model_validate(
+            {
+                "_env_file": None,
+                "auth_mode": "logto",
+                "logto_endpoint": "https://tenant.logto.app",
+                "logto_api_resource": "https://api.rekalled.app",
+            }
         )
 
 

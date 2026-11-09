@@ -5,11 +5,15 @@ import hashlib
 import hmac
 import json
 import time
+from collections.abc import Callable, Mapping
+from typing import cast
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from fastapi import FastAPI
+from httpx import AsyncClient
 
 from app.auth.dependencies import get_token_verifier
 from app.auth.logto import LogtoTokenVerifier
@@ -23,7 +27,7 @@ OTHER_KEY = ec.generate_private_key(ec.SECP384R1())
 
 
 class StaticKeys:
-    def key_for(self, token: str):
+    def key_for(self, token: str) -> ec.EllipticCurvePublicKey:
         kid = jwt.get_unverified_header(token).get("kid")
         if kid != "test-key":
             raise jwt.PyJWKClientError(f"Unknown kid {kid}")
@@ -32,14 +36,14 @@ class StaticKeys:
 
 def token(
     *,
-    key=SIGNING_KEY,
-    kid="test-key",
-    typ="at+jwt",
-    scope="decks:read decks:write cards:generate",
-    **overrides,
+    key: ec.EllipticCurvePrivateKey = SIGNING_KEY,
+    kid: str = "test-key",
+    typ: str = "at+jwt",
+    scope: str = "decks:read decks:write cards:generate",
+    **overrides: object,
 ) -> str:
     now = int(time.time())
-    claims = {
+    claims: dict[str, object] = {
         "iss": ISSUER,
         "aud": AUDIENCE,
         "sub": "logto-user-1",
@@ -51,11 +55,14 @@ def token(
     return jwt.encode(claims, key, algorithm="ES384", headers={"kid": kid, "typ": typ})
 
 
-def unsigned_claims(**overrides) -> dict:
-    return jwt.decode(token(**overrides), options={"verify_signature": False})
+def unsigned_claims() -> dict[str, object]:
+    claims: dict[str, object] = jwt.decode(token(), options={"verify_signature": False})
+    return claims
 
 
-def raw_token(header: dict, claims: dict, sign) -> str:
+def raw_token(
+    header: Mapping[str, object], claims: Mapping[str, object], sign: Callable[[bytes], bytes]
+) -> str:
     """Build a JWT by hand, for algorithms PyJWT refuses to produce on purpose."""
 
     def b64(data: bytes) -> str:
@@ -95,34 +102,37 @@ def bearer(t: str) -> dict[str, str]:
 
 
 @pytest.fixture(autouse=True)
-def logto_mode(app):
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        env="test",
-        auth_mode="logto",
-        logto_endpoint="https://tenant.logto.app",
-        logto_api_resource=AUDIENCE,
-        logto_app_id=CLIENT_ID,
+def logto_mode(app: FastAPI) -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings.model_validate(
+        {
+            "_env_file": None,
+            "env": "test",
+            "auth_mode": "logto",
+            "logto_endpoint": "https://tenant.logto.app",
+            "logto_api_resource": AUDIENCE,
+            "logto_app_id": CLIENT_ID,
+        }
     )
     app.dependency_overrides[get_token_verifier] = lambda: LogtoTokenVerifier(
         issuer=ISSUER, audience=AUDIENCE, client_id=CLIENT_ID, keys=StaticKeys()
     )
 
 
-async def test_a_valid_token_identifies_the_user(client):
+async def test_a_valid_token_identifies_the_user(client: AsyncClient) -> None:
     response = await client.get("/v1/me", headers=bearer(token()))
 
     assert response.status_code == 200
     assert response.json()["scopes"] == ["cards:generate", "decks:read", "decks:write"]
 
 
-async def test_the_same_subject_is_the_same_user(client):
-    first = (await client.get("/v1/me", headers=bearer(token()))).json()
-    second = (await client.get("/v1/me", headers=bearer(token()))).json()
+async def test_the_same_subject_is_the_same_user(client: AsyncClient) -> None:
+    first = cast("dict[str, object]", (await client.get("/v1/me", headers=bearer(token()))).json())
+    second = cast("dict[str, object]", (await client.get("/v1/me", headers=bearer(token()))).json())
 
     assert first["id"] == second["id"]
 
 
-async def test_missing_token_is_401(client):
+async def test_missing_token_is_401(client: AsyncClient) -> None:
     response = await client.get("/v1/me")
 
     assert response.status_code == 401
@@ -144,13 +154,13 @@ async def test_missing_token_is_401(client):
         pytest.param(without_exp, id="no exp"),
     ],
 )
-async def test_invalid_tokens_are_401(client, bad_token):
+async def test_invalid_tokens_are_401(client: AsyncClient, bad_token: Callable[[], str]) -> None:
     response = await client.get("/v1/me", headers=bearer(bad_token()))
 
     assert response.status_code == 401
 
 
-async def test_a_missing_scope_is_403(client):
+async def test_a_missing_scope_is_403(client: AsyncClient) -> None:
     read_only = token(scope="decks:read")
 
     assert (await client.get("/v1/decks", headers=bearer(read_only))).status_code == 200
@@ -158,7 +168,7 @@ async def test_a_missing_scope_is_403(client):
     assert response.status_code == 403
 
 
-async def test_dev_header_is_ignored_in_logto_mode(client):
+async def test_dev_header_is_ignored_in_logto_mode(client: AsyncClient) -> None:
     response = await client.get("/v1/me", headers={"X-Dev-User": "dev|local"})
 
     assert response.status_code == 401

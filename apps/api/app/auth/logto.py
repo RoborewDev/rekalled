@@ -1,8 +1,9 @@
 """Validates Logto access tokens. The only backend code that knows about Logto."""
 
-from typing import Any, Protocol
+from typing import Protocol, cast
 
 import jwt
+from jwt.algorithms import AllowedPublicKeys
 
 from app.auth.principal import Principal
 
@@ -14,7 +15,7 @@ class InvalidTokenError(Exception):
 
 
 class KeyResolver(Protocol):
-    def key_for(self, token: str) -> Any: ...
+    def key_for(self, token: str) -> AllowedPublicKeys: ...
 
 
 class JwksKeyResolver:
@@ -24,8 +25,9 @@ class JwksKeyResolver:
         # 5 s, not PyJWT's 30 s: a slow JWKS endpoint must not hang requests for long.
         self._client: jwt.PyJWKClient = jwt.PyJWKClient(jwks_url, cache_keys=True, timeout=5)
 
-    def key_for(self, token: str) -> Any:
-        return self._client.get_signing_key_from_jwt(token).key
+    def key_for(self, token: str) -> AllowedPublicKeys:
+        # PyJWK.key is untyped in PyJWT, but from_jwk() only returns cryptography key objects.
+        return cast(AllowedPublicKeys, self._client.get_signing_key_from_jwt(token).key)
 
 
 class LogtoTokenVerifier:
@@ -42,7 +44,7 @@ class LogtoTokenVerifier:
             # Access tokens are typed at+jwt. This stops an ID token being used as one.
             if jwt.get_unverified_header(token).get("typ") != "at+jwt":
                 raise InvalidTokenError("Not an access token")
-            claims = jwt.decode(
+            claims: dict[str, object] = jwt.decode(
                 token,
                 self._keys.key_for(token),
                 algorithms=ALGORITHMS,
@@ -55,8 +57,12 @@ class LogtoTokenVerifier:
 
         if self._client_id and claims.get("client_id") != self._client_id:
             raise InvalidTokenError("Token was issued to a different client")
+        sub = claims["sub"]
+        scope = claims.get("scope", "")
+        if not isinstance(sub, str) or not isinstance(scope, str):
+            raise InvalidTokenError("Token subject and scope must be strings")
         return Principal(
             provider="logto",
-            subject=claims["sub"],
-            scopes=frozenset(str(claims.get("scope", "")).split()),
+            subject=sub,
+            scopes=frozenset(scope.split()),
         )
