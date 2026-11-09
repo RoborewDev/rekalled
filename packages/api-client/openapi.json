@@ -7,7 +7,9 @@
   "paths": {
     "/v1/health": {
       "get": {
-        "tags": ["health"],
+        "tags": [
+          "health"
+        ],
         "summary": "Health",
         "operationId": "health",
         "responses": {
@@ -30,7 +32,9 @@
     },
     "/v1/me": {
       "get": {
-        "tags": ["me"],
+        "tags": [
+          "me"
+        ],
         "summary": "Get Me",
         "operationId": "get_me",
         "security": [
@@ -82,7 +86,9 @@
     },
     "/v1/decks": {
       "get": {
-        "tags": ["decks"],
+        "tags": [
+          "decks"
+        ],
         "summary": "List Decks",
         "operationId": "list_decks",
         "security": [
@@ -136,7 +142,9 @@
         }
       },
       "post": {
-        "tags": ["decks"],
+        "tags": [
+          "decks"
+        ],
         "summary": "Create Deck",
         "operationId": "create_deck",
         "security": [
@@ -198,7 +206,9 @@
     },
     "/v1/decks/{deck_id}": {
       "get": {
-        "tags": ["decks"],
+        "tags": [
+          "decks"
+        ],
         "summary": "Get Deck",
         "operationId": "get_deck",
         "security": [
@@ -258,7 +268,9 @@
         }
       },
       "patch": {
-        "tags": ["decks"],
+        "tags": [
+          "decks"
+        ],
         "summary": "Rename Deck",
         "operationId": "rename_deck",
         "security": [
@@ -328,7 +340,9 @@
         }
       },
       "delete": {
-        "tags": ["decks"],
+        "tags": [
+          "decks"
+        ],
         "summary": "Delete Deck",
         "operationId": "delete_deck",
         "security": [
@@ -383,7 +397,9 @@
     },
     "/v1/decks/{deck_id}/sources": {
       "post": {
-        "tags": ["sources"],
+        "tags": [
+          "sources"
+        ],
         "summary": "Create Text Source",
         "operationId": "create_text_source",
         "security": [
@@ -455,7 +471,9 @@
     },
     "/v1/sources/{source_id}": {
       "get": {
-        "tags": ["sources"],
+        "tags": [
+          "sources"
+        ],
         "summary": "Get Source",
         "operationId": "get_source",
         "security": [
@@ -517,7 +535,9 @@
     },
     "/v1/sources/{source_id}/generate": {
       "post": {
-        "tags": ["sources"],
+        "tags": [
+          "sources"
+        ],
         "summary": "Regenerate Source",
         "operationId": "regenerate_source",
         "security": [
@@ -579,7 +599,9 @@
     },
     "/v1/sources/{source_id}/drafts/commit": {
       "post": {
-        "tags": ["cards"],
+        "tags": [
+          "cards"
+        ],
         "summary": "Commit Drafts",
         "operationId": "commit_drafts",
         "security": [
@@ -658,7 +680,9 @@
     },
     "/v1/decks/{deck_id}/cards": {
       "get": {
-        "tags": ["cards"],
+        "tags": [
+          "cards"
+        ],
         "summary": "List Deck Cards",
         "operationId": "list_deck_cards",
         "security": [
@@ -724,7 +748,9 @@
     },
     "/v1/cards/{card_id}": {
       "patch": {
-        "tags": ["cards"],
+        "tags": [
+          "cards"
+        ],
         "summary": "Update Card",
         "operationId": "update_card",
         "security": [
@@ -794,7 +820,9 @@
         }
       },
       "delete": {
-        "tags": ["cards"],
+        "tags": [
+          "cards"
+        ],
         "summary": "Delete Card",
         "operationId": "delete_card",
         "security": [
@@ -849,7 +877,9 @@
     },
     "/v1/study/queue": {
       "get": {
-        "tags": ["study"],
+        "tags": [
+          "study"
+        ],
         "summary": "Get Study Queue",
         "operationId": "get_study_queue",
         "security": [
@@ -922,7 +952,9 @@
     },
     "/v1/reviews": {
       "post": {
-        "tags": ["study"],
+        "tags": [
+          "study"
+        ],
         "summary": "Submit Review",
         "operationId": "submit_review",
         "security": [
@@ -984,7 +1016,9 @@
     },
     "/v1/study/summary": {
       "get": {
-        "tags": ["study"],
+        "tags": [
+          "study"
+        ],
         "summary": "Get Study Summary",
         "operationId": "get_study_summary",
         "security": [
@@ -1140,7 +1174,12 @@
           }
         },
         "type": "object",
-        "required": ["strong", "fading", "weak", "new"],
+        "required": [
+          "strong",
+          "fading",
+          "weak",
+          "new"
+        ],
         "title": "Bands"
       },
       "CardOut": {
@@ -1245,7 +1284,9 @@
           }
         },
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "title": "DeckCreate"
       },
       "DeckOut": {
@@ -1266,7 +1307,11 @@
           }
         },
         "type": "object",
-        "required": ["id", "name", "created_at"],
+        "required": [
+          "id",
+          "name",
+          "created_at"
+        ],
         "title": "DeckOut"
       },
       "DeckStats": {
@@ -1299,7 +1344,13 @@
           }
         },
         "type": "object",
-        "required": ["score", "due", "new", "total", "bands"],
+        "required": [
+          "score",
+          "due",
+          "new",
+          "total",
+          "bands"
+        ],
         "title": "DeckStats"
       },
       "DeckUpdate": {
@@ -1312,7 +1363,9 @@
           }
         },
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "title": "DeckUpdate"
       },
       "DeckWithStats": {
@@ -1336,7 +1389,12 @@
           }
         },
         "type": "object",
-        "required": ["id", "name", "created_at", "stats"],
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "stats"
+        ],
         "title": "DeckWithStats"
       },
       "DraftCommit": {
@@ -1350,7 +1408,9 @@
           }
         },
         "type": "object",
-        "required": ["kept"],
+        "required": [
+          "kept"
+        ],
         "title": "DraftCommit",
         "description": "Every draft of the Source not listed in `kept` is deleted."
       },
@@ -1388,7 +1448,11 @@
           }
         },
         "type": "object",
-        "required": ["card_id", "question", "answer"],
+        "required": [
+          "card_id",
+          "question",
+          "answer"
+        ],
         "title": "KeptDraft"
       },
       "Me": {
@@ -1429,7 +1493,12 @@
           }
         },
         "type": "object",
-        "required": ["id", "email", "display_name", "scopes"],
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "scopes"
+        ],
         "title": "Me"
       },
       "ReviewCreate": {
@@ -1446,12 +1515,21 @@
           },
           "rating": {
             "type": "integer",
-            "enum": [1, 2, 3, 4],
+            "enum": [
+              1,
+              2,
+              3,
+              4
+            ],
             "title": "Rating"
           }
         },
         "type": "object",
-        "required": ["review_id", "card_id", "rating"],
+        "required": [
+          "review_id",
+          "card_id",
+          "rating"
+        ],
         "title": "ReviewCreate"
       },
       "SourceCreate": {
@@ -1476,7 +1554,9 @@
           }
         },
         "type": "object",
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "title": "SourceCreate"
       },
       "SourceOut": {
@@ -1524,7 +1604,15 @@
           }
         },
         "type": "object",
-        "required": ["id", "deck_id", "kind", "title", "content", "created_at", "cards"],
+        "required": [
+          "id",
+          "deck_id",
+          "kind",
+          "title",
+          "content",
+          "created_at",
+          "cards"
+        ],
         "title": "SourceOut"
       },
       "StudyCard": {
@@ -1638,7 +1726,14 @@
           }
         },
         "type": "object",
-        "required": ["score", "due", "new", "studied", "reviews_today", "forecast_7d"],
+        "required": [
+          "score",
+          "due",
+          "new",
+          "studied",
+          "reviews_today",
+          "forecast_7d"
+        ],
         "title": "StudySummary"
       },
       "ValidationError": {
@@ -1674,7 +1769,11 @@
           }
         },
         "type": "object",
-        "required": ["loc", "msg", "type"],
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
         "title": "ValidationError"
       }
     },
