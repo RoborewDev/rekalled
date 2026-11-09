@@ -1,21 +1,62 @@
+from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.params import Depends as DependsParam
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.deps import SessionDep, SettingsDep
 from app.auth.dev import dev_principal
+from app.auth.logto import InvalidTokenError, JwksKeyResolver, LogtoTokenVerifier
 from app.auth.principal import Principal
 from app.models import User
 from app.services.users import get_or_create_user
 
+bearer = HTTPBearer(auto_error=False)
+
+
+@lru_cache
+def _verifier_for(issuer: str, audience: str, client_id: str, jwks_url: str) -> LogtoTokenVerifier:
+    return LogtoTokenVerifier(
+        issuer=issuer,
+        audience=audience,
+        client_id=client_id,
+        keys=JwksKeyResolver(jwks_url),
+    )
+
+
+def get_token_verifier(settings: SettingsDep) -> LogtoTokenVerifier | None:
+    if settings.auth_mode != "logto":
+        return None
+    return _verifier_for(
+        settings.logto_issuer,
+        settings.logto_api_resource,
+        settings.logto_app_id,
+        settings.logto_jwks_url,
+    )
+
+
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status.HTTP_401_UNAUTHORIZED, detail, headers={"WWW-Authenticate": "Bearer"}
+    )
+
 
 async def get_principal(
-    settings: SettingsDep, x_dev_user: Annotated[str | None, Header()] = None
+    verifier: Annotated[LogtoTokenVerifier | None, Depends(get_token_verifier)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    x_dev_user: Annotated[str | None, Header()] = None,
 ) -> Principal:
-    if settings.auth_mode == "dev":
+    if verifier is None:  # AUTH_MODE=dev
         return dev_principal(x_dev_user)
-    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    if credentials is None:
+        raise _unauthorized("Not authenticated")
+    try:
+        # PyJWKClient fetches keys with blocking I/O, so keep it off the event loop.
+        return await run_in_threadpool(verifier.verify, credentials.credentials)
+    except InvalidTokenError as exc:
+        raise _unauthorized("Invalid token") from exc
 
 
 PrincipalDep = Annotated[Principal, Depends(get_principal)]

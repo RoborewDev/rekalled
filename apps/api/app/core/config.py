@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     # "dev" = no tokens, a fixed local user. "logto" = validate Logto access tokens.
     # Required, so a deploy that forgets it fails to start instead of running unauthenticated.
     auth_mode: Literal["dev", "logto"]
-
+    logto_endpoint: str = ""  # e.g. https://abc123.logto.app
+    logto_api_resource: str = ""  # the API identifier in Logto, e.g. https://api.rekalled.app
+    logto_app_id: str = ""
     # Card generation. "fake" needs no API key: handy for frontend work and E2E.
     card_generator: Literal["ai", "fake"] = "ai"
     # A Pydantic AI model string. "gateway/" routes through Pydantic AI Gateway.
@@ -72,7 +74,22 @@ class Settings(BaseSettings):
         # An allowlist, not "not production": an unexpected ENV must not switch auth off.
         if self.auth_mode == "dev" and self.env not in ("development", "test"):
             raise ValueError("AUTH_MODE=dev is only allowed when ENV is development or test")
+        # Without the app id the client_id check would be silently skipped.
+        if self.auth_mode == "logto" and not (
+            self.logto_endpoint and self.logto_api_resource and self.logto_app_id
+        ):
+            raise ValueError(
+                "AUTH_MODE=logto needs LOGTO_ENDPOINT, LOGTO_API_RESOURCE and LOGTO_APP_ID"
+            )
         return self
+
+    @property
+    def logto_issuer(self) -> str:
+        return f"{self.logto_endpoint.rstrip('/')}/oidc"
+
+    @property
+    def logto_jwks_url(self) -> str:
+        return f"{self.logto_issuer}/jwks"
 
     @model_validator(mode="after")
     def ai_generation_needs_a_model(self) -> Self:

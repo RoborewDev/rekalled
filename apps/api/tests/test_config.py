@@ -63,6 +63,16 @@ def test_settings_errors_do_not_echo_the_gateway_key() -> None:
     assert "pylf_canary_key" not in str(exc.value)
 
 
+def test_logto_mode_needs_the_app_id():
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            auth_mode="logto",
+            logto_endpoint="https://tenant.logto.app",
+            logto_api_resource="https://api.rekalled.app",
+        )
+
+
 def test_env_files_do_not_depend_on_the_working_directory(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
