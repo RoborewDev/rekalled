@@ -27,6 +27,11 @@ web:
 dev: env-files
     bash scripts/dev.sh
 
+# Both apps with Logto auth (AUTH_MODE=logto). Needs real tenant values in .env.local:
+# LOGTO_* for the API and VITE_LOGTO_* for the browser.
+dev-logto: env-files
+    AUTH_MODE=logto bash scripts/dev.sh
+
 migrate: env-files
     cd apps/api && uv run alembic upgrade head
 

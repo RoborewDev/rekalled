@@ -16,7 +16,9 @@ export default defineConfig({
     {
       command: "pnpm dev",
       url: "http://localhost:3000",
-      env: { VITE_AUTH_MODE: "dev", VITE_API_URL: "http://localhost:8000" },
+      // The web server reads AUTH_MODE at request time (lib/runtime-env.ts); VITE_AUTH_MODE
+      // is no longer consulted.
+      env: { AUTH_MODE: "dev", VITE_API_URL: "http://localhost:8000" },
       reuseExistingServer: !process.env.CI,
     },
   ],

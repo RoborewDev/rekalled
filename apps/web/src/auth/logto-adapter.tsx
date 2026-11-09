@@ -3,24 +3,45 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AuthContext } from "./context";
 import type { AuthState } from "./types";
 
-const resource = import.meta.env.VITE_LOGTO_API_RESOURCE;
-
-const config: LogtoConfig = {
-  endpoint: import.meta.env.VITE_LOGTO_ENDPOINT,
-  appId: import.meta.env.VITE_LOGTO_APP_ID,
-  resources: [resource],
-  scopes: ["decks:read", "decks:write", "cards:generate"],
-};
-
 const RETURN_TO_KEY = "rekalled.returnTo";
 
-function LogtoBridge({ children }: { children: ReactNode }) {
+/**
+ * Read the Logto tenant config from the VITE_* values baked at build time (Vite loads the
+ * repo-root .env files via envDir in vite.config.ts). Missing values used to surface as an
+ * opaque "Invalid URL" from inside the SDK; fail here with the actual names instead.
+ */
+function resolveLogtoConfig(): { config: LogtoConfig; resource: string } {
+  const endpoint = import.meta.env.VITE_LOGTO_ENDPOINT;
+  const appId = import.meta.env.VITE_LOGTO_APP_ID;
+  const resource = import.meta.env.VITE_LOGTO_API_RESOURCE;
+  if (!endpoint || !appId || !resource) {
+    throw new Error(
+      "Logto auth needs VITE_LOGTO_ENDPOINT, VITE_LOGTO_APP_ID and VITE_LOGTO_API_RESOURCE. " +
+        "Set them in .env.local at the repo root and restart the dev server.",
+    );
+  }
+  return {
+    config: {
+      endpoint,
+      appId,
+      resources: [resource],
+      scopes: ["decks:read", "decks:write", "cards:generate"],
+    },
+    resource,
+  };
+}
+
+function LogtoBridge({ resource, children }: { resource: string; children: ReactNode }) {
   const logto = useLogto();
   const [name, setName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!logto.isAuthenticated) return;
-    void logto.getIdTokenClaims().then((claims: Awaited<ReturnType<typeof logto.getIdTokenClaims>>) => setName(claims?.name ?? claims?.email ?? null));
+    void logto
+      .getIdTokenClaims()
+      .then((claims: Awaited<ReturnType<typeof logto.getIdTokenClaims>>) =>
+        setName(claims?.name ?? claims?.email ?? null),
+      );
   }, [logto]);
 
   const value = useMemo<AuthState>(
@@ -38,16 +59,17 @@ function LogtoBridge({ children }: { children: ReactNode }) {
       },
       signOut: () => void logto.signOut(window.location.origin),
     }),
-    [logto, name],
+    [logto, name, resource],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function LogtoAuthProvider({ children }: { children: ReactNode }) {
+  const { config, resource } = useMemo(resolveLogtoConfig, []);
   return (
     <LogtoProvider config={config}>
-      <LogtoBridge>{children}</LogtoBridge>
+      <LogtoBridge resource={resource}>{children}</LogtoBridge>
     </LogtoProvider>
   );
 }
