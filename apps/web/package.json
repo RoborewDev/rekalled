@@ -12,6 +12,7 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@logto/react": "^4.1.3",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "0.10.14",
     "@tanstack/react-query": "5.105.1",
