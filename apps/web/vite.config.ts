@@ -21,12 +21,12 @@ const config = defineConfig({
   plugins: process.env.VITEST
     ? []
     : lazyPlugins(() => [
-      devtools(),
-      nitro({ rollupConfig: { external: [/^@sentry\//] } }),
-      tailwindcss(),
-      tanstackStart(),
-      viteReact(),
-    ]),
+        devtools(),
+        nitro({ rollupConfig: { external: [/^@sentry\//] } }),
+        tailwindcss(),
+        tanstackStart(),
+        viteReact(),
+      ]),
 });
 
 export default config;

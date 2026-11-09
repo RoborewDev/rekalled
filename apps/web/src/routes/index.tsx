@@ -6,7 +6,7 @@ import {
   getStudySummaryOptions,
   listDecksOptions,
   listDecksQueryKey,
-} from "@rekalled/api-client/query"
+} from "@rekalled/api-client/query";
 import { BandsBar, Score } from "#/components/score";
 
 export const Route = createFileRoute("/")({ component: StudyToday });

@@ -6,7 +6,7 @@ from app.core.config import Settings
 from app.main import create_app
 
 
-async def test_web_origin_may_call_the_api(client):
+async def test_web_origin_may_call_the_api(client: AsyncClient) -> None:
     response = await client.options(
         "/v1/decks",
         headers={
@@ -19,7 +19,7 @@ async def test_web_origin_may_call_the_api(client):
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
 
-async def test_other_origins_are_refused(client):
+async def test_other_origins_are_refused(client: AsyncClient) -> None:
     response = await client.options(
         "/v1/decks",
         headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"},
@@ -27,15 +27,17 @@ async def test_other_origins_are_refused(client):
     assert "access-control-allow-origin" not in response.headers
 
 
-def production_settings(**changes) -> Settings:
-    return Settings(
-        _env_file=None,
-        env="production",
-        auth_mode="logto",
-        logto_endpoint="https://tenant.logto.app",
-        logto_api_resource="https://api.rekalled.app",
-        logto_app_id="spa-app-id",
-        **changes,
+def production_settings(**changes: object) -> Settings:
+    return Settings.model_validate(
+        {
+            "_env_file": None,
+            "env": "production",
+            "auth_mode": "logto",
+            "logto_endpoint": "https://tenant.logto.app",
+            "logto_api_resource": "https://api.rekalled.app",
+            "logto_app_id": "spa-app-id",
+            **changes,
+        }
     )
 
 
@@ -59,4 +61,4 @@ async def test_docs_and_schema_are_off_in_production():
 
 def test_wildcard_cors_is_refused_in_production():
     with pytest.raises(ValidationError):
-        production_settings(cors_origins=["*"])
+        _ = production_settings(cors_origins=["*"])

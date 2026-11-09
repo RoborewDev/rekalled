@@ -23,6 +23,10 @@ def unique_id(route: APIRoute) -> str:
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    # Only pin settings that were passed in explicitly. Otherwise leave get_settings as the
+    # dependency so the lru_cache behaves normally and a cleared cache (a test changing an
+    # environment variable, say) is picked up on the next request.
+    explicit_settings = settings is not None
     settings = settings or get_settings()
     # Interactive docs and the schema are for development. In production they would map
     # the whole API for anyone; the typed client is generated at build time anyway.
@@ -36,7 +40,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json" if docs else None,
     )
     # Routes see the same config as the middleware.
-    app.dependency_overrides[get_settings] = lambda: settings
+    if explicit_settings:
+        app.dependency_overrides[get_settings] = lambda: settings
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

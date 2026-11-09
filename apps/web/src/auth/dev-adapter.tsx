@@ -7,8 +7,8 @@ const devAuth: AuthState = {
   status: "signedIn",
   user: { name: "Dev user" },
   getAccessToken: async () => null,
-  signIn: () => { },
-  signOut: () => { },
+  signIn: () => {},
+  signOut: () => {},
 };
 
 export function DevAuthProvider({ children }: { children: ReactNode }) {

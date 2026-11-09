@@ -1,4 +1,4 @@
-import type { Bands } from "@rekalled/api-client"
+import type { Bands } from "@rekalled/api-client";
 
 /** Memory score 0–1 shown as a percentage; "new" when nothing has been reviewed yet. */
 export function Score({ value, size = "md" }: { value: number | null; size?: "md" | "lg" }) {
