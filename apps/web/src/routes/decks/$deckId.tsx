@@ -26,6 +26,13 @@ function DeckPage() {
   const cards = useQuery(listDeckCardsOptions({ path: { deck_id: deckId } }));
 
   if (deck.isPending) return <p>Loading…</p>;
+  if (deck.isError) {
+    return (
+      <p role="alert" className="text-sm text-red">
+        Could not load this deck. Reload the page to try again.
+      </p>
+    );
+  }
   if (!deck.data) return <p>Deck not found.</p>;
   const { stats } = deck.data;
 
@@ -46,6 +53,11 @@ function DeckPage() {
 
       <section className="space-y-2">
         <h2 className="text-2xl">Cards</h2>
+        {cards.isError && (
+          <p role="alert" className="text-sm text-red">
+            Could not load the cards for this deck.
+          </p>
+        )}
         {cards.data?.length === 0 && (
           <p className="text-ink-soft">No cards yet. Paste some text above.</p>
         )}
@@ -90,8 +102,12 @@ function AddTextForm({ deckId }: { deckId: string }) {
         placeholder="Paste notes, an article, a chapter…"
         required
       />
-      {create.isError && <p className="text-sm text-red">Generation failed. Try again.</p>}
-      <button className="btn-primary" disabled={create.isPending}>
+      {create.isError && (
+        <p role="alert" className="text-sm text-red">
+          Generation failed. Try again.
+        </p>
+      )}
+      <button type="submit" className="btn-primary" disabled={create.isPending}>
         {create.isPending ? "Generating…" : "Generate cards"}
       </button>
     </form>

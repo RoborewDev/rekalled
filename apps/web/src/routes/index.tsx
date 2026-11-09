@@ -82,7 +82,8 @@ function NewDeckForm() {
   const create = useMutation({
     ...createDeckMutation(),
     onSuccess: async (deck) => {
-      await queryClient.invalidateQueries({ queryKey: listDecksQueryKey() });
+      setName("");
+      void queryClient.invalidateQueries({ queryKey: listDecksQueryKey() });
       await navigate({ to: "/decks/$deckId", params: { deckId: deck.id } });
     },
   });

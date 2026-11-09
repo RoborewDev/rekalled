@@ -46,6 +46,23 @@ describe("study session", () => {
     expect(state.again).toBe(1);
   });
 
+  it("keeps bringing a card back while it is rated Again", () => {
+    let state = startSession([card("a")]);
+    state = sessionReducer(state, { type: "rate", rating: 1, now: NOW });
+    state = sessionReducer(state, { type: "rate", rating: 1, now: NOW });
+
+    expect(state.queue.map((c) => c.id)).toEqual(["a"]);
+    expect(state.again).toBe(2);
+  });
+
+  it("does not re-queue a reviewed card on a stale interval preview", () => {
+    let state = startSession([card("a")]);
+    state = sessionReducer(state, { type: "rate", rating: 1, now: NOW });
+    state = sessionReducer(state, { type: "rate", rating: 3, now: NOW });
+
+    expect(isFinished(state)).toBe(true);
+  });
+
   it("finishes when the queue is empty", () => {
     let state = startSession([card("a")]);
     state = sessionReducer(state, { type: "rate", rating: 4, now: NOW });

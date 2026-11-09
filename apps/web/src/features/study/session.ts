@@ -2,11 +2,13 @@ import type { StudyCard } from "@rekalled/api-client";
 
 export type Rating = 1 | 2 | 3 | 4;
 
-/** A card rated Again/Hard comes back in the same session if it is due within this window. */
+/** A card rated Hard/Good comes back in the same session if it is due within this window. */
 export const LEARN_AHEAD_MS = 20 * 60 * 1000;
 
+export type SessionCard = StudyCard & { reviewed: boolean };
+
 export type SessionState = {
-  queue: StudyCard[];
+  queue: SessionCard[];
   revealed: boolean;
   reviewed: number;
   again: number;
@@ -15,10 +17,15 @@ export type SessionState = {
 export type SessionAction = { type: "reveal" } | { type: "rate"; rating: Rating; now: Date };
 
 export function startSession(cards: StudyCard[]): SessionState {
-  return { queue: cards, revealed: false, reviewed: 0, again: 0 };
+  return {
+    queue: cards.map((card) => ({ ...card, reviewed: false })),
+    revealed: false,
+    reviewed: 0,
+    again: 0,
+  };
 }
 
-export function currentCard(state: SessionState): StudyCard | null {
+export function currentCard(state: SessionState): SessionCard | null {
   return state.queue[0] ?? null;
 }
 
@@ -36,10 +43,12 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
 
     case "rate": {
       const dueIso = card.next_due[String(action.rating)];
-      const comesBack =
+      const dueSoon =
         dueIso !== undefined && new Date(dueIso).getTime() - action.now.getTime() <= LEARN_AHEAD_MS;
-      // The interval previews are stale once a card has been reviewed, so drop them.
-      const queue = comesBack ? [...rest, { ...card, next_due: {} }] : rest;
+      // Again always returns within the session. Other ratings only return when the
+      // preview says so, and previews are only trustworthy before the first review.
+      const comesBack = action.rating === 1 || (!card.reviewed && dueSoon);
+      const queue = comesBack ? [...rest, { ...card, reviewed: true }] : rest;
       return {
         queue,
         revealed: false,

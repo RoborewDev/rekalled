@@ -8,6 +8,12 @@ export const Route = createFileRoute("/sources/$sourceId")({ component: DraftChe
 
 type Draft = { keep: boolean; question: string; answer: string };
 
+const toDraft = (card: CardOut): Draft => ({
+  keep: true,
+  question: card.question,
+  answer: card.answer,
+});
+
 function DraftCheck() {
   const { sourceId } = Route.useParams();
   const source = useQuery(getSourceOptions({ path: { source_id: sourceId } }));
@@ -28,9 +34,7 @@ function DraftForm({
   drafts: CardOut[];
 }) {
   const [edits, setEdits] = useState<Record<string, Draft>>(() =>
-    Object.fromEntries(
-      drafts.map((d) => [d.id, { keep: true, question: d.question, answer: d.answer }]),
-    ),
+    Object.fromEntries(drafts.map((d) => [d.id, toDraft(d)])),
   );
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -42,9 +46,14 @@ function DraftForm({
     },
   });
 
-  const update = (id: string, patch: Partial<Draft>) =>
-    setEdits((e) => ({ ...e, [id]: { ...e[id], ...patch } }));
-  const kept = Object.entries(edits).filter(([, d]) => d.keep);
+  const update = (draft: CardOut, patch: Partial<Draft>) =>
+    setEdits((e) => ({
+      ...e,
+      [draft.id]: { ...toDraft(draft), ...e[draft.id], ...patch },
+    }));
+  const kept = drafts
+    .map((draft) => [draft.id, edits[draft.id] ?? toDraft(draft)] as const)
+    .filter(([, d]) => d.keep);
 
   return (
     <form
@@ -63,28 +72,29 @@ function DraftForm({
       <p className="text-ink-soft">
         Untick anything wrong or trivial. Edit wording before it goes into the deck.
       </p>
-      {drafts.map((draft) => {
-        const d = edits[draft.id];
+      {drafts.map((draft, index) => {
+        const d = edits[draft.id] ?? toDraft(draft);
         return (
           <fieldset key={draft.id} className={`panel space-y-2 ${d.keep ? "" : "opacity-50"}`}>
+            <legend className="sr-only">Card {index + 1}</legend>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={d.keep}
-                onChange={(e) => update(draft.id, { keep: e.target.checked })}
+                onChange={(e) => update(draft, { keep: e.target.checked })}
               />
               Keep
             </label>
             <input
               className="field font-medium"
               value={d.question}
-              onChange={(e) => update(draft.id, { question: e.target.value })}
+              onChange={(e) => update(draft, { question: e.target.value })}
               aria-label="Question"
             />
             <textarea
               className="field"
               value={d.answer}
-              onChange={(e) => update(draft.id, { answer: e.target.value })}
+              onChange={(e) => update(draft, { answer: e.target.value })}
               aria-label="Answer"
             />
             {draft.source_excerpt && (
@@ -93,7 +103,16 @@ function DraftForm({
           </fieldset>
         );
       })}
-      <button className="btn-primary" disabled={commit.isPending}>
+      {commit.isError && (
+        <p role="alert" className="text-sm text-red">
+          Could not add the cards. Try again.
+        </p>
+      )}
+      <button
+        type="submit"
+        className="btn-primary"
+        disabled={commit.isPending || kept.length === 0}
+      >
         Add {kept.length} cards to deck
       </button>
     </form>
