@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import type { StudyCard } from "@rekalled/api-client";
 import { getStudyQueueOptions, submitReviewMutation } from "@rekalled/api-client/query";
 import { opId } from "#/lib/query-keys";
@@ -48,6 +48,9 @@ function Session({ cards }: { cards: StudyCard[] }) {
   const [state, dispatch] = useReducer(sessionReducer, cards, startSession);
   const card = currentCard(state);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // A failed submission is retried with the same review_id, so a response that was
+  // lost after the server committed the review is not counted twice.
+  const pending = useRef<{ reviewId: string; cardId: string; rating: Rating } | null>(null);
   const queryClient = useQueryClient();
   const review = useMutation({
     ...submitReviewMutation(),
@@ -61,13 +64,21 @@ function Session({ cards }: { cards: StudyCard[] }) {
     if (!card || review.isPending) return;
     const now = new Date();
     setSubmitError(null);
+    const retry =
+      pending.current?.cardId === card.id && pending.current.rating === rating
+        ? pending.current.reviewId
+        : crypto.randomUUID();
+    pending.current = { reviewId: retry, cardId: card.id, rating };
     // Only advance once the server has recorded the review, so a failed POST leaves
     // the card in the queue instead of silently dropping it.
     review.mutate(
       // review_id makes the POST idempotent: a retried request is not counted twice.
-      { body: { review_id: crypto.randomUUID(), card_id: card.id, rating } },
+      { body: { review_id: retry, card_id: card.id, rating } },
       {
-        onSuccess: () => dispatch({ type: "rate", rating, now }),
+        onSuccess: () => {
+          pending.current = null;
+          dispatch({ type: "rate", rating, now });
+        },
         onError: () =>
           setSubmitError("Couldn't save that review. Check your connection and try again."),
       },
