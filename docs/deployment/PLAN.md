@@ -72,7 +72,7 @@ Create API and web Docker Image applications in both `staging` and `production`.
 
 Use separate databases and Infisical environments for staging and production. Keep the same setting names in both, with different values.
 
-On each API app, set the Infisical bootstrap variables:
+On each app (API and web), set the Infisical bootstrap variables:
 
 ```text
 INFISICAL_API_URL
@@ -82,7 +82,7 @@ INFISICAL_CLIENT_ID
 INFISICAL_CLIENT_SECRET
 ```
 
-Keep credentials runtime-only, not build-time. The API image uses the Infisical CLI to load settings when it starts.
+Keep credentials runtime-only, not build-time. Both images use the Infisical CLI to load settings when they start.
 
 `INFISICAL_ENV` is the Infisical environment slug for that app: `staging` on staging and `prod` on production. Never use `dev`. Its `DATABASE_URL` points at the docker-compose Postgres on localhost. `infisical run` injects its values into the command's environment, overriding anything set in Coolify. The entrypoint therefore refuses `dev`, `development` and `local` and stops the container with a clear error. It also stops when the bootstrap variables are only partly set, or when login fails. Its first log line, `[entrypoint] secrets: infisical (project=… env=… domain=…)`, shows which environment loaded. The `INFISICAL_UNIVERSAL_AUTH_CLIENT_ID`/`_SECRET` and `INFISICAL_DOMAIN` aliases from `scripts/env-pull.sh` are also accepted.
 
@@ -90,9 +90,11 @@ Keep credentials runtime-only, not build-time. The API image uses the Infisical 
 
 In Infisical, set `ENV=production`, `AUTH_MODE=logto` and the environment's `DATABASE_URL`, plus the authentication and AI settings required by the implemented features. Use an identity with access only to its own environment.
 
-Keep secrets out of the web image. Any public configuration that differs between environments must be supplied at runtime, not baked into `VITE_*` build settings.
+The web app uses the same bootstrap variables and the same entrypoint pattern as the API: with them present it logs in and wraps the server in `infisical run`, injecting the environment's values as plain environment variables; without them the server runs with whatever the platform set. A wrong or `dev` slug is refused, a partly-set bootstrap fails, and a failed login stops the container with a clear error instead of serving requests without configuration.
 
-On each web app, set `API_URL` to that environment's public API origin (for example `https://api.rekalled.app`) and `AUTH_MODE` to the same value the API uses. With `AUTH_MODE=logto`, also set `LOGTO_ENDPOINT`, `LOGTO_APP_ID` and `LOGTO_API_RESOURCE` to the same public values the API uses. The web server reads all of them at request time via a server function, so the promoted image needs no rebuild and no `VITE_*` value. A production container missing a required value shows a clear configuration error instead of calling the wrong origin, auth mode or tenant.
+In Infisical, each environment the web app deploys to needs `API_URL` (that environment's public API origin, for example `https://api-staging.rekalled.app` on staging), `AUTH_MODE` (the same value the API uses) and — with `AUTH_MODE=logto` — `LOGTO_ENDPOINT`, `LOGTO_APP_ID` and `LOGTO_API_RESOURCE` (the same public values the API uses). The server validates all of them at start-up via a Nitro plugin, so a missing value crashes the container before it listens and Coolify shows it unhealthy; the old failure mode — a healthy container whose pages could not load their config — can no longer hide behind the `/` health check. The promoted image still needs no rebuild and no `VITE_*` value for any of this.
+
+Keep secrets out of the web image. Any public configuration that differs between environments must be supplied at runtime, not baked into `VITE_*` build settings. Note that `infisical run` injects every secret the machine identity can read, so the web server's process also holds the environment's database and AI keys today; when convenient, give the web app its own machine identity (or a web/ folder path in Infisical) with access to only the values above.
 
 In Infisical, also set `CORS_ORIGINS` to a JSON list of the web app's public origin, such as `["https://app.rekalled.app"]`. The API refuses to start in production when the list is empty, contains `*`, or contains a localhost or scheme-less entry.
 
