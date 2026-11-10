@@ -91,7 +91,16 @@ describe("web container entrypoint", () => {
     expect(cliRun).toContain("--projectId=proj-123");
     expect(cliRun).toContain("--env=staging");
     expect(cliRun).toContain("--token=fake-token");
+    expect(cliRun).not.toContain("--path");
     expect(result.stderr).toContain("env=staging");
+  });
+
+  it("INFISICAL_PATH scopes the injection to a web-only folder", async () => {
+    const result = await run({ ...BOOTSTRAP, INFISICAL_PATH: "/web" });
+
+    expect(result.status).toBe(0);
+    expect(result.calls[1]).toContain("--path=/web");
+    expect(result.stderr).toContain("path=/web");
   });
 
   it("the server never sees the long-lived client credentials", async () => {

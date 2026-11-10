@@ -73,6 +73,14 @@ ENV NODE_ENV=production \
     PORT=3000 \
     GIT_SHA=${GIT_SHA}
 
+# The Infisical CLI is a Go binary that verifies TLS against the system CA store, which
+# node:slim does not ship (Node bundles its own). Without this, `infisical login` fails
+# with "certificate signed by unknown authority" whenever the bootstrap variables are set
+# — the API image gets it for free from its python:slim base.
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY --from=infisical /usr/local/bin/infisical /usr/local/bin/infisical
 COPY --from=builder --chown=node:node /app/apps/web/.output ./.output
