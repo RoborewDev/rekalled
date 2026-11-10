@@ -92,7 +92,7 @@ In Infisical, set `ENV=production`, `AUTH_MODE=logto` and the environment's `DAT
 
 Keep secrets out of the web image. Any public configuration that differs between environments must be supplied at runtime, not baked into `VITE_*` build settings.
 
-On each web app, set `API_URL` to that environment's public API origin (for example `https://api.rekalled.app`) and `AUTH_MODE` to the same value the API uses. The web server reads both at request time via a server function, so the promoted image needs no rebuild and no `VITE_*` value. A production container started without them shows a clear configuration error instead of calling the wrong origin or auth mode. Until the Logto adapter exists, `AUTH_MODE=logto` makes the web app report that it has no adapter rather than silently using the dev one.
+On each web app, set `API_URL` to that environment's public API origin (for example `https://api.rekalled.app`) and `AUTH_MODE` to the same value the API uses. With `AUTH_MODE=logto`, also set `LOGTO_ENDPOINT`, `LOGTO_APP_ID` and `LOGTO_API_RESOURCE` to the same public values the API uses. The web server reads all of them at request time via a server function, so the promoted image needs no rebuild and no `VITE_*` value. A production container missing a required value shows a clear configuration error instead of calling the wrong origin, auth mode or tenant.
 
 In Infisical, also set `CORS_ORIGINS` to a JSON list of the web app's public origin, such as `["https://app.rekalled.app"]`. The API refuses to start in production when the list is empty, contains `*`, or contains a localhost or scheme-less entry.
 

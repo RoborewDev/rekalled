@@ -28,7 +28,7 @@ dev: env-files
     bash scripts/dev.sh
 
 # Both apps with Logto auth (AUTH_MODE=logto). Needs real tenant values in .env.local:
-# LOGTO_* for the API and VITE_LOGTO_* for the browser.
+# LOGTO_ENDPOINT, LOGTO_APP_ID and LOGTO_API_RESOURCE (read by the API and the web server).
 dev-logto: env-files
     AUTH_MODE=logto bash scripts/dev.sh
 

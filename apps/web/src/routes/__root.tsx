@@ -56,9 +56,9 @@ function App() {
 }
 
 function ConfiguredApp() {
-  const { authMode } = useRuntimeConfig();
+  const { authMode, logto } = useRuntimeConfig();
   return (
-    <AuthProvider mode={authMode}>
+    <AuthProvider mode={authMode} logto={logto}>
       <ApiClient>
         <Layout />
       </ApiClient>
