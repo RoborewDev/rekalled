@@ -27,6 +27,11 @@ web:
 dev: env-files
     bash scripts/dev.sh
 
+# Both apps with Logto auth (AUTH_MODE=logto). Needs real tenant values in .env.local:
+# LOGTO_ENDPOINT, LOGTO_APP_ID and LOGTO_API_RESOURCE (read by the API and the web server).
+dev-logto: env-files
+    AUTH_MODE=logto bash scripts/dev.sh
+
 migrate: env-files
     cd apps/api && uv run alembic upgrade head
 
@@ -71,3 +76,7 @@ images:
 # for the throwaway-database prerequisite)
 smoke: images env-files
     bash scripts/ci/smoke-local.sh
+
+# Full loop in a real browser (dev auth + fake generator). Needs `just db` and `just migrate`.
+e2e:
+    cd apps/web && pnpm exec playwright test

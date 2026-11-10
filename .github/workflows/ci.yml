@@ -1,4 +1,4 @@
-# Tests, lint and image checks. Runs on every pull request to main, and is reused by
+# Tests, lint, e2e and image checks. Runs on every pull request to main, and is reused by
 # release.yml so code that lands on main passes the same gates before it ships.
 # Required status check on main: "ci-ok" (the last job), so adding jobs never means
 # editing the ruleset.
@@ -24,8 +24,26 @@ concurrency:
 env:
   PNPM_VERSION: "12.16.1"
   NODE_VERSION: "24"
+  AUTH_MODE: dev
+  # Throwaway password for the CI service containers only, defined once. Not a real secret.
+  # The env context is unavailable in services and job-level env, so the password and the
+  # CI database URLs are anchored here and aliased wherever they are needed below.
+  POSTGRES_PASSWORD: &pg_password ci-only-not-a-secret
+  TEST_DATABASE_URL: &test_db_url postgresql+asyncpg://postgres:ci-only-not-a-secret@localhost:5432/rekalled_test
+  E2E_DATABASE_URL: &e2e_db_url postgresql+asyncpg://postgres:ci-only-not-a-secret@localhost:5432/rekalled
 
 jobs:
+  # Dev credentials must never be hard-coded in app code or Compose (they belong in .env).
+  no-default-credentials:
+    name: No default credentials
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: "! git grep -n 'postgres:postgres@' -- apps/ docker-compose.yml"
+
   repo-lint:
     name: Repo lint (workflows, secrets, Dockerfiles, shell)
     runs-on: ubuntu-24.04
@@ -88,8 +106,7 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg17@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: *pg_password
           POSTGRES_DB: rekalled_test
         ports: ["5432:5432"]
         options: >-
@@ -97,12 +114,11 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       ENV: test
-      AUTH_MODE: dev
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/rekalled_test
-      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/rekalled_test
       # Harmless placeholder: start-up validation requires a gateway key for the default
       # ai generator. Tests never call a real model (conftest disables model requests).
       PYDANTIC_AI_GATEWAY_API_KEY: pylf_v1_eu_ci-not-a-real-key
+      # Alembic check and the OpenAPI export below also build Settings, which needs a URL.
+      DATABASE_URL: *test_db_url
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -166,6 +182,61 @@ jobs:
       - run: pnpm build
       - name: Known vulnerabilities in production dependencies
         run: pnpm audit --prod --audit-level high
+
+  e2e:
+    name: E2E (Playwright, chromium)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [no-default-credentials, repo-lint, api, web]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8
+        env:
+          POSTGRES_PASSWORD: *pg_password
+          POSTGRES_DB: rekalled
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Alembic and the API that Playwright's webServer starts both build Settings, which
+      # needs a database URL.
+      DATABASE_URL: *e2e_db_url
+      # The default "ai" generator fails start-up validation without a gateway key; the
+      # fake generator needs none, and the E2E flow never calls a real model.
+      CARD_GENERATOR: fake
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          working-directory: apps/api
+          enable-cache: true
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: uv sync --locked && uv run alembic upgrade head
+        working-directory: apps/api
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: apps/web
+      # playwright.config.ts starts both servers (API on :8000, web on :3000) itself.
+      - run: pnpm exec playwright test
+        working-directory: apps/web
+      - name: Upload Playwright report and traces
+        if: ${{ !cancelled() }} # a hung/cancelled run is exactly when the trace matters
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: playwright-artifacts
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
 
   images:
     name: Images (build, smoke test, scan)
@@ -239,7 +310,7 @@ jobs:
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [repo-lint, api, web, images]
+    needs: [no-default-credentials, repo-lint, api, web, e2e, images]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
