@@ -6,13 +6,15 @@ import { describe, expect, it } from "vite-plus/test";
 
 // The container entrypoint decides where secrets come from before the server starts.
 // These run the real script with a fake `infisical` CLI on PATH, so no network or secrets
-// are involved. The fake records its arguments and, for `run`, executes the wrapped
+// are involved. The fake logs every argument of every invocation (not a joined string,
+// so word-splitting bugs show up as stray arguments) and, for `run`, executes the wrapped
 // command. Mirrors apps/api/tests/test_entrypoint.py so both images stay in step.
 
 const ENTRYPOINT = new URL("./entrypoint.sh", import.meta.url);
 
 const FAKE_INFISICAL = `#!/bin/sh
-echo "$*" >> "$FAKE_LOG"
+echo "== $1" >> "$FAKE_LOG"
+for a in "$@"; do echo "$a" >> "$FAKE_LOG"; done
 case "$1" in
   login)
     [ "\${FAKE_LOGIN_FAILS:-}" = 1 ] && exit 1
@@ -32,12 +34,28 @@ const BOOTSTRAP = {
   INFISICAL_API_URL: "https://infisical.example.test",
 } as const;
 
+type Invocation = { cmd: string; args: string[] };
+
 type Run = {
   status: number;
   stdout: string;
   stderr: string;
-  calls: string[];
+  invocations: Invocation[];
 };
+
+function parseInvocations(log: string): Invocation[] {
+  const invocations: Invocation[] = [];
+  let current: Invocation | null = null;
+  for (const line of log.split("\n").filter(Boolean)) {
+    if (line.startsWith("== ")) {
+      current = { cmd: line.slice(3), args: [] };
+      invocations.push(current);
+    } else if (current) {
+      current.args.push(line);
+    }
+  }
+  return invocations;
+}
 
 async function run(
   env: Record<string, string>,
@@ -60,14 +78,14 @@ async function run(
     encoding: "utf8",
     timeout: 10_000,
   });
-  const calls = await readFile(log, "utf8")
-    .then((text) => text.split("\n").filter(Boolean))
+  const invocations = await readFile(log, "utf8")
+    .then(parseInvocations)
     .catch(() => []);
   return {
     status: result.status ?? -1,
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
-    calls,
+    invocations,
   };
 }
 
@@ -78,29 +96,22 @@ describe("web container entrypoint", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("API_URL=https://api.example.test");
     expect(result.stderr).toContain("platform environment variables");
-    expect(result.calls).toEqual([]);
+    expect(result.invocations).toEqual([]);
   });
 
   it("with Infisical it wraps the command in infisical run", async () => {
     const result = await run(BOOTSTRAP);
 
     expect(result.status).toBe(0);
-    const [login, cliRun] = result.calls;
-    expect(login.startsWith("login --method=universal-auth")).toBe(true);
-    expect(login).toContain("--domain=https://infisical.example.test");
-    expect(cliRun).toContain("--projectId=proj-123");
-    expect(cliRun).toContain("--env=staging");
-    expect(cliRun).toContain("--token=fake-token");
-    expect(cliRun).not.toContain("--path");
+    const [login, cliRun] = result.invocations;
+    expect(login.args[0]).toBe("login");
+    expect(login.args).toContain("--method=universal-auth");
+    expect(login.args).toContain("--domain=https://infisical.example.test");
+    expect(cliRun.args).toContain("--projectId=proj-123");
+    expect(cliRun.args).toContain("--env=staging");
+    expect(cliRun.args).toContain("--token=fake-token");
+    expect(cliRun.args.filter((arg) => arg.startsWith("--path"))).toEqual([]);
     expect(result.stderr).toContain("env=staging");
-  });
-
-  it("INFISICAL_PATH scopes the injection to a web-only folder", async () => {
-    const result = await run({ ...BOOTSTRAP, INFISICAL_PATH: "/web" });
-
-    expect(result.status).toBe(0);
-    expect(result.calls[1]).toContain("--path=/web");
-    expect(result.stderr).toContain("path=/web");
   });
 
   it("the server never sees the long-lived client credentials", async () => {
@@ -137,7 +148,7 @@ describe("web container entrypoint", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("INFISICAL_CLIENT_SECRET");
-    expect(result.calls).toEqual([]);
+    expect(result.invocations).toEqual([]);
   });
 
   it.each(["dev", "development", "local"])("a development slug is refused (%s)", async (slug) => {
@@ -145,7 +156,7 @@ describe("web container entrypoint", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(`INFISICAL_ENV=${slug}`);
-    expect(result.calls).toEqual([]);
+    expect(result.invocations).toEqual([]);
   });
 
   it("a development slug can be allowed explicitly", async () => {
@@ -156,7 +167,7 @@ describe("web container entrypoint", () => {
     });
 
     expect(result.status).toBe(0);
-    expect(result.calls[1]).toContain("--env=dev");
+    expect(result.invocations[1]?.args).toContain("--env=dev");
   });
 
   it("the universal-auth and domain aliases are accepted", async () => {
@@ -170,7 +181,7 @@ describe("web container entrypoint", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).not.toContain("S3cretClient");
-    expect(result.calls[0]).toContain("--domain=https://alias.example.test");
+    expect(result.invocations[0]?.args).toContain("--domain=https://alias.example.test");
   });
 
   it("a failed login stops the container", async () => {
@@ -178,6 +189,23 @@ describe("web container entrypoint", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("login failed");
-    expect(result.calls).toHaveLength(1);
+    expect(result.invocations).toHaveLength(1);
+  });
+
+  it("INFISICAL_PATH scopes the injection to a web-only folder", async () => {
+    const result = await run({ ...BOOTSTRAP, INFISICAL_PATH: "/web" });
+
+    expect(result.status).toBe(0);
+    expect(result.invocations[1]?.args).toContain("--path=/web");
+    expect(result.stderr).toContain("path=/web");
+  });
+
+  it("an INFISICAL_PATH with whitespace stays a single argument", async () => {
+    const result = await run({ ...BOOTSTRAP, INFISICAL_PATH: "/web apps" });
+
+    expect(result.status).toBe(0);
+    // One argument, not a stray "apps" positional: word-splitting here would make
+    // `infisical run` misparse its flags at deploy time.
+    expect(result.invocations[1]?.args).toContain("--path=/web apps");
   });
 });

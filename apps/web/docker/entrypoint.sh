@@ -26,9 +26,11 @@ client_id="${INFISICAL_CLIENT_ID:-${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID:-}}"
 client_secret="${INFISICAL_CLIENT_SECRET:-${INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET:-}}"
 env_slug="${INFISICAL_ENV:-}"
 # Optional folder scope for a web server that must not hold the environment's database
-# and AI credentials: with INFISICAL_PATH, `infisical run --path` injects only the secrets
-# under that folder (root-level secrets are then NOT injected, so the folder must hold
-# every value lib/runtime-env.ts needs). Unset means the whole environment, as before.
+# and AI credentials in its ambient environment: with INFISICAL_PATH, `infisical run --path`
+# injects only the secrets under that folder (root-level secrets are then NOT injected, so
+# the folder must hold every value lib/runtime-env.ts needs). Deployment convenience,
+# not a security boundary: the web app's machine identity should itself be folder-scoped.
+# Unset means the whole environment, as before.
 path="${INFISICAL_PATH:-}"
 
 if [ -z "${project_id}${client_id}${client_secret}${env_slug}" ]; then
@@ -72,6 +74,7 @@ unset client_id client_secret
 
 log "secrets: infisical (project=${project_id} env=${env_slug} domain=${domain}${path:+ path=${path}})"
 # --token, not an exported INFISICAL_TOKEN: the server must never inherit the token.
-# ${path:+...} adds the folder scope only when INFISICAL_PATH is set (quoted as one word).
+# The quotes inside ${path:+...} keep the folder scope a single argument (spaces or globs
+# in INFISICAL_PATH must not split into stray arguments) while an unset value adds none.
 exec infisical run --token="${token}" --projectId="${project_id}" --env="${env_slug}" \
-  --domain="${domain}" --silent ${path:+--path=${path}} -- "$@"
+  --domain="${domain}" --silent ${path:+--path="${path}"} -- "$@"
