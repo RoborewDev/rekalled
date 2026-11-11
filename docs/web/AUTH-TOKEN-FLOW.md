@@ -36,13 +36,13 @@ sign-in instead of a storm.
 
 ## The pieces
 
-| File                                     | Role                                                                                                            |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `apps/web/src/auth/token-access.ts`      | Pure, injectable gate: serialization, sharing, terminal `invalid_grant` handling. No React, no Logto imports.   |
-| `apps/web/src/auth/logto-adapter.tsx`    | Wires the gate into `LogtoBridge`; recovers swallowed SDK errors; redirects to sign-in on a dead session.       |
-| `apps/web/src/lib/auth-fetch.ts`         | Unchanged retry ladder: attaches Bearer token, on 401 forces one refresh + retry, on double-401 calls `signIn`. |
-| `apps/web/src/auth/token-access.test.ts` | Gate behavior with deterministic fakes (never real Logto), per [CONTRIBUTING](../../CONTRIBUTING.md).           |
-| `apps/web/src/lib/auth-fetch.test.ts`    | The 401 ladder, including the null-token path a dead session takes.                                             |
+| File                                     | Role                                                                                                                                                                       |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/auth/token-access.ts`      | Pure, injectable gate: serialization, sharing, terminal `invalid_grant` handling. No React, no Logto imports.                                                              |
+| `apps/web/src/auth/logto-adapter.tsx`    | Wires the gate into `LogtoBridge`; recovers swallowed SDK errors; redirects to sign-in on a dead session; shares one in-flight `signIn` attempt (the SDK does not dedupe). |
+| `apps/web/src/lib/auth-fetch.ts`         | Unchanged retry ladder: attaches Bearer token, on 401 forces one refresh + retry, on double-401 calls `signIn`.                                                            |
+| `apps/web/src/auth/token-access.test.ts` | Gate behavior with deterministic fakes (never real Logto), per [CONTRIBUTING](../../CONTRIBUTING.md).                                                                      |
+| `apps/web/src/lib/auth-fetch.test.ts`    | The 401 ladder, including the null-token path a dead session takes.                                                                                                        |
 
 ## The gate (`token-access.ts`)
 
@@ -58,7 +58,9 @@ sign-in instead of a storm.
   non-forced in-flight promise. It queues behind whatever is in flight, then
   `source.clearAccessToken()`, then fetches. Concurrent forced callers share one forced
   fetch. This comes from the 401 ladder in `auth-fetch.ts`: clear-then-fetch, ordered,
-  never two POSTs with the same refresh token.
+  never two POSTs with the same refresh token. If the session is flagged dead while the
+  clear is pending, the op resolves `null` without fetching — no token POST may follow
+  the start of recovery.
 - **Terminal `invalid_grant`.** If a fetch rejects with an `invalid_grant`-shaped error,
   the gate marks itself dead, invokes `onSessionDead()` exactly once, and resolves
   `null`. While dead, every later call — forced or not — resolves `null` immediately with
@@ -80,7 +82,10 @@ against SDK shape drift. It matches either:
   `LogtoError("unexpected_response_error", body)`.
 
 Near-misses intentionally **not** matched: `not_authenticated` (SDK `LogtoClientError`),
-plain network errors, generic HTTP errors from the requester, sign-in-callback errors.
+plain network errors, generic HTTP errors from the requester. Note that `isInvalidGrant`
+matches on shape alone — it cannot tell a dead refresh grant from a stale authorization
+code (RFC 6749 §5.2 uses the same error for both); telling them apart is the adapter's
+job, via the callback-route guard below.
 
 ## The react SDK quirk: swallowed errors
 
@@ -96,14 +101,24 @@ To recover the swallowed case, `LogtoBridge` watches the provider error state:
 ```ts
 const { error } = logto; // from useLogto()
 useEffect(() => {
+  // On the callback route an invalid_grant is the (stale) authorization-code exchange,
+  // which SignInCallback handles itself — not a dead refresh grant.
+  if (window.location.pathname === "/callback") return;
   if (error && isInvalidGrant(error)) tokenAccess.markSessionDead();
 }, [error, tokenAccess]);
 ```
 
-Attribution is sound because **every** `POST /oidc/token` in the app flows through the
-gate: `getIdTokenClaims` failures are `not_authenticated`-shaped, `fetchUserInfo` is
-unused, sign-in-callback errors are not `invalid_grant`-shaped. An `invalid_grant`-shaped
-error in that state can only have come from one of our own serialized refreshes.
+Attribution rests on two facts. **Every refresh POST flows through the gate**, and the
+other Logto calls that report into the provider error state fail with different shapes:
+`getIdTokenClaims` failures are `not_authenticated`-shaped, and `fetchUserInfo` is unused.
+The one other `POST /oidc/token` in the app — the `/callback` authorization-code exchange
+— does **not** pass through the gate, and it also fails with `invalid_grant` when the
+code is stale or revoked. That exchange is handled by `useHandleSignInCallback`, which
+keeps its error in the hook's local state and renders `SignInCallback`'s own error UI,
+so it does not reach `useLogto().error` as shipped. Two guards keep a future SDK from
+breaking that assumption: the effect above ignores `invalid_grant` while on the callback
+route, and `sanitizeReturnTo` never hands back `/callback`, so a misattributed exchange
+error can neither flag the session dead nor corrupt the saved return path.
 
 ## What happens on the wire
 

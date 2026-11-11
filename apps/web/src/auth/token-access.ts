@@ -46,7 +46,12 @@ export function createTokenAccess(
   const run = async (forceRefresh: boolean): Promise<string | null> => {
     if (dead) return null;
     try {
-      if (forceRefresh) await source.clearAccessToken();
+      if (forceRefresh) {
+        await source.clearAccessToken();
+        // The session may have been flagged dead while the clear was pending; recovery
+        // has already started, so no token work may follow it.
+        if (dead) return null;
+      }
       return (await source.getAccessToken(resource)) ?? null;
     } catch (error) {
       if (!isInvalidGrant(error)) throw error;

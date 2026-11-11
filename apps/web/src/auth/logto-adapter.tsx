@@ -12,6 +12,9 @@ function sanitizeReturnTo(value: string | null | undefined): string {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
     return "/";
   }
+  // The callback route is a redirect target, not a landing page: returning there after
+  // sign-in would re-enter the code exchange with no code to exchange.
+  if (value === "/callback") return "/";
   return value;
 }
 
@@ -40,11 +43,21 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
     };
   }, [logto.isAuthenticated]);
 
+  // The SDK does not dedupe signIn: an overlapping second call overwrites the first
+  // attempt's state and PKCE verifier in storage, so the callback's validation would fail.
+  // Extra callers while one is pending ride along; once an attempt settles (the page did
+  // not navigate), a later call can retry.
+  const signInInFlight = useRef<Promise<void> | null>(null);
   const signIn = useCallback(
     (returnTo?: string) => {
+      if (signInInFlight.current) return;
       // Logto owns the redirect; we only remember where to land afterwards.
       sessionStorage.setItem(RETURN_TO_KEY, sanitizeReturnTo(returnTo));
-      void logto.signIn(`${window.location.origin}/callback`);
+      const attempt = logto.signIn(`${window.location.origin}/callback`);
+      signInInFlight.current = attempt;
+      void attempt.finally(() => {
+        if (signInInFlight.current === attempt) signInInFlight.current = null;
+      });
     },
     [logto],
   );
@@ -67,6 +80,9 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
 
   const { error } = logto;
   useEffect(() => {
+    // On the callback route an `invalid_grant` is the (stale) authorization-code exchange,
+    // which SignInCallback handles with its own error screen — not a dead refresh grant.
+    if (window.location.pathname === "/callback") return;
     if (error && isInvalidGrant(error)) tokenAccess.markSessionDead();
   }, [error, tokenAccess]);
 

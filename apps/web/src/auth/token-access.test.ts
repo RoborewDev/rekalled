@@ -11,6 +11,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+/** Drain enough microtask ticks for queued gate work to start; deterministic, no timers. */
+async function flush(ticks = 10) {
+  for (let i = 0; i < ticks; i += 1) await Promise.resolve();
+}
+
 function invalidGrantError() {
   return Object.assign(new Error("Grant request is invalid"), {
     code: "oidc.invalid_grant",
@@ -38,6 +43,7 @@ describe("createTokenAccess", () => {
   it("orders a forced refresh after the in-flight fetch: clear, then fetch, never mid-flight", async () => {
     const first = deferred<string>();
     const second = deferred<string>();
+    const clearing = deferred<void>();
     const order: string[] = [];
     const getAccessToken = vi
       .fn(() => first.promise)
@@ -49,23 +55,36 @@ describe("createTokenAccess", () => {
         order.push("fetch2");
         return second.promise;
       });
-    const clearAccessToken = vi.fn(async () => {
+    const clearAccessToken = vi.fn(() => {
       order.push("clear");
+      return clearing.promise;
     });
     const access = createTokenAccess({ getAccessToken, clearAccessToken }, RESOURCE);
 
     const gentle = access.getAccessToken();
-    await Promise.resolve(); // let the queue start the first fetch
+    await flush(); // let the queue start the first fetch
     expect(getAccessToken).toHaveBeenCalledTimes(1);
+
     const forced = access.getAccessToken({ forceRefresh: true });
-    expect(clearAccessToken).not.toHaveBeenCalled();
+    // Queued work gets every chance to progress, but the clear must wait for the first
+    // fetch to settle — not merely to start.
+    await flush();
+    expect(order).toStrictEqual(["fetch1"]);
 
     first.resolve("t1");
-    second.resolve("t2");
     expect(await gentle).toBe("t1");
-    expect(await forced).toBe("t2");
+    // The settled first fetch releases the queued forced op: the clear starts, and the
+    // second fetch waits for the clear to complete.
+    await flush();
+    expect(order).toStrictEqual(["fetch1", "clear"]);
+    expect(getAccessToken).toHaveBeenCalledTimes(1);
 
+    clearing.resolve();
+    await flush();
     expect(order).toStrictEqual(["fetch1", "clear", "fetch2"]);
+
+    second.resolve("t2");
+    expect(await forced).toBe("t2");
   });
 
   it("shares one forced fetch across concurrent forced callers", async () => {
@@ -163,6 +182,26 @@ describe("createTokenAccess", () => {
     expect(onSessionDead).toHaveBeenCalledOnce();
     expect(getAccessToken).not.toHaveBeenCalled();
     expect(clearAccessToken).not.toHaveBeenCalled();
+  });
+
+  it("resolves null without fetching when the session dies while a forced clear is pending", async () => {
+    const clearing = deferred<void>();
+    const getAccessToken = vi.fn(async () => "t1");
+    const clearAccessToken = vi.fn(() => clearing.promise);
+    const onSessionDead = vi.fn();
+    const access = createTokenAccess({ getAccessToken, clearAccessToken }, RESOURCE, onSessionDead);
+
+    const forced = access.getAccessToken({ forceRefresh: true });
+    await flush(); // the forced op starts its clear
+    expect(clearAccessToken).toHaveBeenCalledOnce();
+
+    // The dead flag lands while the clear is still pending: recovery starts here, so
+    // no token request may follow it.
+    access.markSessionDead();
+    clearing.resolve();
+
+    expect(await forced).toBeNull();
+    expect(getAccessToken).not.toHaveBeenCalled();
   });
 
   it("notifies onSessionDead once when the internal and external dead paths converge", async () => {
