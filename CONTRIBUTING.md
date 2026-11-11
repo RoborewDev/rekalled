@@ -41,7 +41,7 @@ The smoke test needs a throwaway database; see the `justfile`.
 ## Keep these boundaries
 
 - FastAPI owns data and business logic; TanStack Start stays a presentation layer.
-- Keep Logto integration in `auth/`, model-provider code in its adapters and FSRS imports in the Scheduler.
+- Keep Logto integration in `auth/`, model-provider code in its adapters and FSRS imports in the Scheduler. The web app's token-refresh gate is documented in [docs/web/AUTH-TOKEN-FLOW.md](docs/web/AUTH-TOKEN-FLOW.md).
 - Use expand/contract migrations. Create them with `just revision "message"` and check the advisory lock if changing migration startup.
 - Keep environment-specific web settings at runtime, not in `VITE_*` build values.
 - When a generated API client is present, regenerate it with API contract changes.

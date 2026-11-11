@@ -1,6 +1,7 @@
 import { LogtoProvider, useHandleSignInCallback, useLogto, type LogtoConfig } from "@logto/react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AuthContext } from "./context";
+import { createTokenAccess, isInvalidGrant, type TokenAccess } from "./token-access";
 import type { AuthState, LogtoConfigValues } from "./types";
 
 const RETURN_TO_KEY = "rekalled.returnTo";
@@ -39,22 +40,56 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
     };
   }, [logto.isAuthenticated]);
 
+  const signIn = useCallback(
+    (returnTo?: string) => {
+      // Logto owns the redirect; we only remember where to land afterwards.
+      sessionStorage.setItem(RETURN_TO_KEY, sanitizeReturnTo(returnTo));
+      void logto.signIn(`${window.location.origin}/callback`);
+    },
+    [logto],
+  );
+
+  // One token gate per bridge, in a ref so it survives the AuthState memo below (design:
+  // docs/web/AUTH-TOKEN-FLOW.md). The SDK's hook methods are identity-stable and `signIn`
+  // reads the location at call time, so the first-render captures stay correct. Serialization
+  // here is what keeps parallel react-query fetches from replaying one refresh token and
+  // bricking the grant.
+  const access = useRef<TokenAccess | null>(null);
+  if (access.current === null) {
+    access.current = createTokenAccess(
+      {
+        getAccessToken: (apiResource) => logto.getAccessToken(apiResource),
+        clearAccessToken: () => logto.clearAccessToken(),
+      },
+      resource,
+      () => {
+        // Mirror the double-401 recovery in auth-fetch: the grant is unrecoverable, so
+        // let Logto's signIn clear the dead tokens and take the user to sign in.
+        if (typeof window === "undefined") return;
+        signIn(window.location.pathname);
+      },
+    );
+  }
+  const tokenAccess = access.current;
+
+  // `useLogto`'s proxy swallows errors into the provider's `error` state instead of
+  // rethrowing, so a terminal `invalid_grant` surfaces there rather than as a rejection.
+  // Every access-token POST goes through the gate, so an `invalid_grant`-shaped error in
+  // that state can only come from one of our serialized refreshes — flag it dead there.
+  const { error } = logto;
+  useEffect(() => {
+    if (error && isInvalidGrant(error)) tokenAccess.markSessionDead();
+  }, [error, tokenAccess]);
+
   const value = useMemo<AuthState>(
     () => ({
       status: logto.isLoading ? "loading" : logto.isAuthenticated ? "signedIn" : "signedOut",
       user: logto.isAuthenticated ? { name } : null,
-      getAccessToken: async ({ forceRefresh } = {}) => {
-        if (forceRefresh) await logto.clearAccessToken();
-        return (await logto.getAccessToken(resource)) ?? null;
-      },
-      signIn: (returnTo) => {
-        // Logto owns the redirect; we only remember where to land afterwards.
-        sessionStorage.setItem(RETURN_TO_KEY, sanitizeReturnTo(returnTo));
-        void logto.signIn(`${window.location.origin}/callback`);
-      },
+      getAccessToken: (options) => tokenAccess.getAccessToken(options),
+      signIn,
       signOut: () => void logto.signOut(window.location.origin),
     }),
-    [logto, name, resource],
+    [logto, name, resource, signIn, tokenAccess],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
