@@ -1,6 +1,7 @@
 import { LogtoProvider, useHandleSignInCallback, useLogto, type LogtoConfig } from "@logto/react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AuthContext } from "./context";
+import { createTokenAccess, isInvalidGrant, type TokenAccess } from "./token-access";
 import type { AuthState, LogtoConfigValues } from "./types";
 
 const RETURN_TO_KEY = "rekalled.returnTo";
@@ -11,6 +12,9 @@ function sanitizeReturnTo(value: string | null | undefined): string {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
     return "/";
   }
+  // The callback route is a redirect target, not a landing page: returning there after
+  // sign-in would re-enter the code exchange with no code to exchange.
+  if (value === "/callback") return "/";
   return value;
 }
 
@@ -39,22 +43,58 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
     };
   }, [logto.isAuthenticated]);
 
+  // The SDK does not dedupe signIn: an overlapping second call overwrites the first
+  // attempt's state and PKCE verifier in storage, so the callback's validation would fail.
+  // Extra callers while one is pending ride along; once an attempt settles (the page did
+  // not navigate), a later call can retry.
+  const signInInFlight = useRef<Promise<void> | null>(null);
+  const signIn = useCallback(
+    (returnTo?: string) => {
+      if (signInInFlight.current) return;
+      // Logto owns the redirect; we only remember where to land afterwards.
+      sessionStorage.setItem(RETURN_TO_KEY, sanitizeReturnTo(returnTo));
+      const attempt = logto.signIn(`${window.location.origin}/callback`);
+      signInInFlight.current = attempt;
+      void attempt.finally(() => {
+        if (signInInFlight.current === attempt) signInInFlight.current = null;
+      });
+    },
+    [logto],
+  );
+
+  const access = useRef<TokenAccess | null>(null);
+  if (access.current === null) {
+    access.current = createTokenAccess(
+      {
+        getAccessToken: (apiResource) => logto.getAccessToken(apiResource),
+        clearAccessToken: () => logto.clearAccessToken(),
+      },
+      resource,
+      () => {
+        if (typeof window === "undefined") return;
+        signIn(window.location.pathname);
+      },
+    );
+  }
+  const tokenAccess = access.current;
+
+  const { error } = logto;
+  useEffect(() => {
+    // On the callback route an `invalid_grant` is the (stale) authorization-code exchange,
+    // which SignInCallback handles with its own error screen — not a dead refresh grant.
+    if (window.location.pathname === "/callback") return;
+    if (error && isInvalidGrant(error)) tokenAccess.markSessionDead();
+  }, [error, tokenAccess]);
+
   const value = useMemo<AuthState>(
     () => ({
       status: logto.isLoading ? "loading" : logto.isAuthenticated ? "signedIn" : "signedOut",
       user: logto.isAuthenticated ? { name } : null,
-      getAccessToken: async ({ forceRefresh } = {}) => {
-        if (forceRefresh) await logto.clearAccessToken();
-        return (await logto.getAccessToken(resource)) ?? null;
-      },
-      signIn: (returnTo) => {
-        // Logto owns the redirect; we only remember where to land afterwards.
-        sessionStorage.setItem(RETURN_TO_KEY, sanitizeReturnTo(returnTo));
-        void logto.signIn(`${window.location.origin}/callback`);
-      },
+      getAccessToken: (options) => tokenAccess.getAccessToken(options),
+      signIn,
       signOut: () => void logto.signOut(window.location.origin),
     }),
-    [logto, name, resource],
+    [logto, name, resource, signIn, tokenAccess],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
