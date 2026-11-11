@@ -49,11 +49,6 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
     [logto],
   );
 
-  // One token gate per bridge, in a ref so it survives the AuthState memo below (design:
-  // docs/web/AUTH-TOKEN-FLOW.md). The SDK's hook methods are identity-stable and `signIn`
-  // reads the location at call time, so the first-render captures stay correct. Serialization
-  // here is what keeps parallel react-query fetches from replaying one refresh token and
-  // bricking the grant.
   const access = useRef<TokenAccess | null>(null);
   if (access.current === null) {
     access.current = createTokenAccess(
@@ -63,8 +58,6 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
       },
       resource,
       () => {
-        // Mirror the double-401 recovery in auth-fetch: the grant is unrecoverable, so
-        // let Logto's signIn clear the dead tokens and take the user to sign in.
         if (typeof window === "undefined") return;
         signIn(window.location.pathname);
       },
@@ -72,10 +65,6 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
   }
   const tokenAccess = access.current;
 
-  // `useLogto`'s proxy swallows errors into the provider's `error` state instead of
-  // rethrowing, so a terminal `invalid_grant` surfaces there rather than as a rejection.
-  // Every access-token POST goes through the gate, so an `invalid_grant`-shaped error in
-  // that state can only come from one of our serialized refreshes — flag it dead there.
   const { error } = logto;
   useEffect(() => {
     if (error && isInvalidGrant(error)) tokenAccess.markSessionDead();

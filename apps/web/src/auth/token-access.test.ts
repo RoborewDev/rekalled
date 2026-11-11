@@ -11,7 +11,6 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-/** The terminal error as the SDK reports it: endpoint body on `data`, logto code on `code`. */
 function invalidGrantError() {
   return Object.assign(new Error("Grant request is invalid"), {
     code: "oidc.invalid_grant",
@@ -59,7 +58,6 @@ describe("createTokenAccess", () => {
     await Promise.resolve(); // let the queue start the first fetch
     expect(getAccessToken).toHaveBeenCalledTimes(1);
     const forced = access.getAccessToken({ forceRefresh: true });
-    // The forced call queues behind the in-flight one; it must not clear underneath it.
     expect(clearAccessToken).not.toHaveBeenCalled();
 
     first.resolve("t1");
@@ -98,7 +96,6 @@ describe("createTokenAccess", () => {
 
     expect(await access.getAccessToken()).toBeNull();
     expect(await access.getAccessToken()).toBeNull();
-    // Even a forced refresh is short-circuited: no clear, no fetch, no second redirect.
     expect(await access.getAccessToken({ forceRefresh: true })).toBeNull();
 
     expect(onSessionDead).toHaveBeenCalledOnce();
@@ -126,7 +123,6 @@ describe("createTokenAccess", () => {
 
   it("treats a data-only invalid_grant shape as terminal too", async () => {
     const getAccessToken = vi.fn(async () => {
-      // The token-endpoint body may arrive without a Logto error code on the wrapper.
       throw Object.assign(new Error("unexpected_response_error"), {
         data: { error: "invalid_grant", error_description: "Grant request is invalid" },
       });
@@ -170,8 +166,6 @@ describe("createTokenAccess", () => {
   });
 
   it("notifies onSessionDead once when the internal and external dead paths converge", async () => {
-    // The swallowed-error path in logto-adapter can land after the gate already saw the
-    // rejection — or vice versa — so both must funnel into a single recovery attempt.
     const getAccessToken = vi.fn(async () => {
       throw invalidGrantError();
     });
