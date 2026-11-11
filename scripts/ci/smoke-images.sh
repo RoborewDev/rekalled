@@ -26,9 +26,15 @@ docker run -d --name rekalled-api-smoke --network host \
   -e PYDANTIC_AI_GATEWAY_API_KEY=pylf_v1_eu_smoke-not-a-real-key \
   -e DATABASE_URL="${SMOKE_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/rekalled_smoke}" \
   "$api_image" >/dev/null
-# The web server reads its API origin and auth mode at runtime, so set them as Coolify would.
+# The web server validates its runtime config at start-up (it crashes rather than serve
+# a wrong origin or tenant), so set the values Coolify would: the API origin, auth mode and
+# the public Logto settings. They are placeholders, like the API container's above.
 docker run -d --name rekalled-web-smoke --network host \
-  -e PORT=3000 -e API_URL=http://127.0.0.1:8000 -e AUTH_MODE=logto "$web_image" >/dev/null
+  -e PORT=3000 -e API_URL=http://127.0.0.1:8000 -e AUTH_MODE=logto \
+  -e LOGTO_ENDPOINT=https://logto-smoke.invalid \
+  -e LOGTO_APP_ID=smoke-app-id \
+  -e LOGTO_API_RESOURCE=https://api-smoke.invalid \
+  "$web_image" >/dev/null
 
 wait_healthy() { # container
   for _ in $(seq 1 30); do
