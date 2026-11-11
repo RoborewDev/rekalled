@@ -33,7 +33,34 @@ COPY packages/api-client packages/api-client
 RUN pnpm --filter web build
 
 # ---------------------------------------------------------------------------
-# Stage 2: runtime. .output is self-contained (Nitro bundles server deps), so no
+# Stage 2: Infisical CLI, downloaded and checksum-verified (optional at runtime).
+# Same pinned release and checksums as the API image, so a Grype finding here is a
+# finding there too.
+# ---------------------------------------------------------------------------
+FROM debian:trixie-slim AS infisical
+# Grype also scans the Go modules inside this binary, so pin a release whose dependencies
+# are patched (v0.45.4: brotli 1.2.8, klauspost/compress 1.20.3).
+ARG INFISICAL_VERSION=0.45.4
+ARG INFISICAL_SHA256_AMD64=107389f4c9a0cc48023a834bb2a5bf1280c0a0e45ea7a98d13807d4def21b0a5
+ARG INFISICAL_SHA256_ARM64=fcfd91de70efdedc7f8c1b1d90a024b433bb185387fe32467d49625a3bf55379
+ARG TARGETARCH
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && case "${TARGETARCH:-amd64}" in \
+    amd64) sum="${INFISICAL_SHA256_AMD64}" ;; \
+    arm64) sum="${INFISICAL_SHA256_ARM64}" ;; \
+    *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/infisical.tgz \
+    "https://github.com/Infisical/cli/releases/download/v${INFISICAL_VERSION}/cli_${INFISICAL_VERSION}_linux_${TARGETARCH:-amd64}.tar.gz" \
+    && echo "${sum}  /tmp/infisical.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/infisical.tgz -C /usr/local/bin infisical \
+    && /usr/local/bin/infisical --version
+
+# ---------------------------------------------------------------------------
+# Stage 3: runtime. .output is self-contained (Nitro bundles server deps), so no
 # node_modules, no pnpm and no source code ship in this image.
 # ---------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-slim AS runtime
@@ -46,9 +73,19 @@ ENV NODE_ENV=production \
     PORT=3000 \
     GIT_SHA=${GIT_SHA}
 
+# The Infisical CLI is a Go binary that verifies TLS against the system CA store, which
+# node:slim does not ship (Node bundles its own). Without this, `infisical login` fails
+# with "certificate signed by unknown authority" whenever the bootstrap variables are set
+# — the API image gets it for free from its python:slim base.
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
+COPY --from=infisical /usr/local/bin/infisical /usr/local/bin/infisical
 COPY --from=builder --chown=node:node /app/apps/web/.output ./.output
 COPY --from=builder --chown=node:node /app/apps/web/docker/healthcheck.mjs ./healthcheck.mjs
+COPY --chown=node:node --chmod=0755 apps/web/docker/entrypoint.sh /app/docker/entrypoint.sh
 # Numeric UID/GID of the base image's `node` user (hadolint DL3066).
 USER 1000
 EXPOSE 3000
@@ -56,4 +93,8 @@ EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
     CMD ["node", "/app/healthcheck.mjs"]
 
+# Same secrets bootstrap as the API image: with the INFISICAL_* variables the entrypoint
+# wraps the server in `infisical run`, injecting the environment's values as plain
+# environment variables; without them the platform's variables are used as-is.
+ENTRYPOINT ["/app/docker/entrypoint.sh"]
 CMD ["node", ".output/server/index.mjs"]

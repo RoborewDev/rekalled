@@ -20,13 +20,19 @@ const config = defineConfig({
     options: { typeAware: true, typeCheck: true },
   },
   resolve: { tsconfigPaths: true },
-  test: { include: ["src/**/*.test.{ts,tsx}"] },
+  test: { include: ["src/**/*.test.{ts,tsx}", "docker/**/*.test.ts"] },
   // Unit tests are plain TS: skip the app plugins (Start, Nitro) so Vitest exits cleanly.
   plugins: process.env.VITEST
     ? []
     : lazyPlugins(() => [
         devtools(),
-        nitro({ rollupConfig: { external: [/^@sentry\//] } }),
+        // Server start-up hook: validates the runtime config before the server accepts
+        // requests, so a misconfigured container fails its health check instead of
+        // serving pages that cannot load their config (see src/server/plugins).
+        nitro({
+          plugins: ["./src/server/plugins/validate-config"],
+          rollupConfig: { external: [/^@sentry\//] },
+        }),
         tailwindcss(),
         tanstackStart(),
         viteReact(),
