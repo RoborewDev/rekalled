@@ -94,13 +94,16 @@ test("cancel is unavailable while a save is pending", async ({ page }) => {
   const deckName = `Pending save ${Date.now()}`;
   await createDeckWithCards(page, deckName);
 
-  // Hold the PATCH open so the save stays pending until released.
-  let releaseSave: (() => void) | undefined;
+  // Hold the PATCH open so the save stays pending until released. The captured
+  // promise resolves only once the handler has the request, so releasing can
+  // never run before the stall is in place.
+  let releaseSave!: () => void;
+  let signalCaptured!: () => void;
+  const saveCaptured = new Promise<void>((resolve) => (signalCaptured = resolve));
   await page.route("**/v1/cards/*", async (route) => {
     if (route.request().method() === "PATCH") {
-      await new Promise<void>((resolve) => {
-        releaseSave = resolve;
-      });
+      signalCaptured();
+      await new Promise<void>((resolve) => (releaseSave = resolve));
     }
     await route.continue();
   });
@@ -109,12 +112,13 @@ test("cancel is unavailable while a save is pending", async ({ page }) => {
   await mitochondria.getByRole("button", { name: "Edit card" }).click();
   await mitochondria.getByLabel("Question").fill("Held question?");
   await mitochondria.getByRole("button", { name: "Save" }).click();
+  await saveCaptured;
 
   // Cancel must not close the form while the save is in flight.
   await expect(mitochondria.getByRole("button", { name: "Cancel" })).toBeDisabled();
 
   // Once the save settles, the new wording is there.
-  releaseSave?.();
+  releaseSave();
   await expect(mitochondria.getByText("Held question?")).toBeVisible();
 });
 
@@ -122,13 +126,15 @@ test("the delete dialog cannot be dismissed while deletion is pending", async ({
   const deckName = `Pending delete ${Date.now()}`;
   await createDeckWithCards(page, deckName);
 
-  // Hold the DELETE open so the dialog stays pending until released.
-  let releaseDelete: (() => void) | undefined;
+  // Hold the DELETE open so the dialog stays pending until released; the
+  // captured promise gates releasing on the handler actually having the request.
+  let releaseDelete!: () => void;
+  let signalCaptured!: () => void;
+  const deleteCaptured = new Promise<void>((resolve) => (signalCaptured = resolve));
   await page.route("**/v1/cards/*", async (route) => {
     if (route.request().method() === "DELETE") {
-      await new Promise<void>((resolve) => {
-        releaseDelete = resolve;
-      });
+      signalCaptured();
+      await new Promise<void>((resolve) => (releaseDelete = resolve));
     }
     await route.continue();
   });
@@ -137,6 +143,7 @@ test("the delete dialog cannot be dismissed while deletion is pending", async ({
   await ribosomes.getByRole("button", { name: "Delete card" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await deleteCaptured;
 
   // While the DELETE is in flight, every dismissal path is refused.
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeDisabled();
@@ -147,7 +154,7 @@ test("the delete dialog cannot be dismissed while deletion is pending", async ({
   await expect(dialog).toBeVisible();
 
   // Once it settles, the card is gone.
-  releaseDelete?.();
+  releaseDelete();
   await expect(ribosomes).toHaveCount(0);
   await expect(page.getByRole("listitem")).toHaveCount(2);
 });

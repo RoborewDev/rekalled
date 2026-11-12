@@ -52,6 +52,13 @@ export function ConfirmDialog({
         const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
           "button:not([disabled]), [href], input, select, textarea",
         );
+        if (!dialogRef.current?.contains(document.activeElement)) {
+          // Focus left the dialog (e.g. a control being disabled dropped it to
+          // body): pull it back to the first enabled control, or the container.
+          e.preventDefault();
+          (focusable?.[0] ?? dialogRef.current)?.focus();
+          return;
+        }
         if (!focusable?.length) {
           // Nothing focusable (all controls disabled while pending): hold focus.
           e.preventDefault();
@@ -59,7 +66,10 @@ export function ConfirmDialog({
         }
         const first = focusable[0]!;
         const last = focusable[focusable.length - 1]!;
-        if (e.shiftKey && document.activeElement === first) {
+        if (
+          e.shiftKey &&
+          (document.activeElement === first || document.activeElement === dialogRef.current)
+        ) {
           e.preventDefault();
           last.focus();
         } else if (!e.shiftKey && document.activeElement === last) {
@@ -82,6 +92,7 @@ export function ConfirmDialog({
       <div
         ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         className="panel w-full max-w-md space-y-4"
