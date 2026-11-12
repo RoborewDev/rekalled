@@ -45,3 +45,13 @@ h3 {
 @utility field {
   @apply w-full rounded-md border border-line bg-card px-3 py-2 text-sm focus:border-ink focus:outline-none;
 }
+
+/* Icon-only action, from the prototype's .btn-icon: quiet until hovered. */
+@utility btn-icon {
+  @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-soft transition hover:bg-ink/10 hover:text-ink;
+}
+
+/* Destructive confirm, from the prototype's .btn-danger: red on a soft red fill. */
+@utility btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-md border border-red bg-card px-4 py-2 text-sm font-medium text-red transition hover:bg-red/10 disabled:opacity-50;
+}
