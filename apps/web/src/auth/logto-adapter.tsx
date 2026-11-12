@@ -1,6 +1,7 @@
 import { LogtoProvider, useHandleSignInCallback, useLogto, type LogtoConfig } from "@logto/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AuthContext } from "./context";
+import { authStatus } from "./status";
 import { createTokenAccess, isInvalidGrant, type TokenAccess } from "./token-access";
 import type { AuthState, LogtoConfigValues } from "./types";
 
@@ -88,7 +89,7 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
 
   const value = useMemo<AuthState>(
     () => ({
-      status: logto.isLoading ? "loading" : logto.isAuthenticated ? "signedIn" : "signedOut",
+      status: authStatus(logto),
       user: logto.isAuthenticated ? { name } : null,
       getAccessToken: (options) => tokenAccess.getAccessToken(options),
       signIn,
