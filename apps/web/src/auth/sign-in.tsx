@@ -20,14 +20,12 @@ export function SignIn({ returnTo }: { returnTo: string }) {
   const startSignIn = () => {
     setFailed(false);
     if (hosted) setRedirecting(true);
-    try {
-      auth.signIn(returnTo);
-    } catch {
-      // A synchronous failure (e.g. browser storage unavailable) must not leave the
-      // overlay up with the button disabled.
+    // The promise covers both a synchronous throw inside the adapter (browser storage
+    // unavailable) and an async SDK failure; either way the overlay must clear.
+    void auth.signIn(returnTo).catch(() => {
       setRedirecting(false);
       setFailed(true);
-    }
+    });
   };
 
   return (

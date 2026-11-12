@@ -15,6 +15,7 @@ export type AuthState = {
   user: AuthUser | null;
   /** Null in dev mode: the API's dev bypass needs no token. */
   getAccessToken: (options?: { forceRefresh?: boolean }) => Promise<string | null>;
-  signIn: (returnTo?: string) => void;
+  /** Rejects if the redirect could not be started (storage unavailable, SDK failure). */
+  signIn: (returnTo?: string) => Promise<void>;
   signOut: () => void;
 };

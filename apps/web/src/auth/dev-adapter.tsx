@@ -36,7 +36,7 @@ export function DevAuthProvider({ children }: { children: ReactNode }) {
       user: signedOut ? null : { name: "Dev user" },
       getAccessToken: async () => null,
       // returnTo is moot in dev: sign-in never leaves the page, so the user is already back.
-      signIn: () => {
+      signIn: async () => {
         persistSignedOut(false);
         setSignedOut(false);
       },
