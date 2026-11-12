@@ -13,7 +13,6 @@ describe("configureApi", () => {
   it("points the generated client at the runtime API origin", () => {
     configureApi("https://api.example.test", {
       getAccessToken: async () => null,
-      signIn: () => {},
     });
 
     expect(client.getConfig().baseUrl).toBe("https://api.example.test");
@@ -24,7 +23,7 @@ describe("configureApi", () => {
     const baseFetch = vi.fn<typeof fetch>(async () => Response.json({}));
     vi.stubGlobal("fetch", baseFetch);
 
-    configureApi("https://api.example.test", { getAccessToken, signIn: vi.fn() });
+    configureApi("https://api.example.test", { getAccessToken });
     await client.get({ url: "/v1/me" });
 
     expect(getAccessToken).toHaveBeenCalledOnce();

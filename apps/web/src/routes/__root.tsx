@@ -83,7 +83,6 @@ function ApiClient({ children }: { children: ReactNode }) {
   useMemo(() => {
     configureApi(apiUrl, {
       getAccessToken: (options) => latest.current.getAccessToken(options),
-      signIn: (returnTo) => latest.current.signIn(returnTo),
     });
   }, [apiUrl]);
 

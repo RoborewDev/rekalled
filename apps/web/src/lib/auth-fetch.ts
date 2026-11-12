@@ -1,10 +1,11 @@
 import type { AuthState } from "#/auth/types";
 
-type Auth = Pick<AuthState, "getAccessToken" | "signIn">;
+type Auth = Pick<AuthState, "getAccessToken">;
 
 /**
- * fetch that adds the Bearer token. On a 401 it forces a token refresh and retries once;
- * if that also fails, it sends the user to sign in.
+ * fetch that adds the Bearer token. On a 401 it forces one token refresh and retries once,
+ * then returns whatever the API answered. It never redirects: a dead session recovers
+ * through the token gate, and any other 401 surfaces as a query error.
  */
 export function createAuthFetch(auth: Auth, baseFetch: typeof fetch = fetch): typeof fetch {
   return async (input, init) => {
@@ -19,9 +20,6 @@ export function createAuthFetch(auth: Auth, baseFetch: typeof fetch = fetch): ty
 
     const first = await send(false);
     if (first.status !== 401) return first;
-
-    const second = await send(true);
-    if (second.status === 401) auth.signIn(globalThis.location?.pathname);
-    return second;
+    return send(true);
   };
 }
