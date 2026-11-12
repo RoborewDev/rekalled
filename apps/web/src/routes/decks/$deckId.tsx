@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import type { ActiveCardOut } from "@rekalled/api-client";
 import {
@@ -20,6 +20,9 @@ export const Route = createFileRoute("/decks/$deckId")({ component: DeckPage });
 /** Weakest first so the cards that need work are at the top; unreviewed cards last. */
 const byWeakest = (a: ActiveCardOut, b: ActiveCardOut) =>
   (a.memory_score ?? 2) - (b.memory_score ?? 2);
+
+/** Mirrors MAX_CARD_TEXT in the API's CardUpdate schema; longer text is rejected. */
+const MAX_CARD_TEXT = 2_000;
 
 function DeckPage() {
   const { deckId } = Route.useParams();
@@ -79,6 +82,14 @@ function DeckPage() {
 function CardRow({ card }: { card: ActiveCardOut }) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+
+  // When editing ends the row is back, so return focus to its Edit button.
+  useEffect(() => {
+    if (wasEditing.current && !editing) editButtonRef.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
 
   if (editing) return <EditCard card={card} onDone={() => setEditing(false)} />;
   return (
@@ -90,6 +101,7 @@ function CardRow({ card }: { card: ActiveCardOut }) {
       <div className="flex shrink-0 items-center gap-2">
         <Score value={card.memory_score} />
         <button
+          ref={editButtonRef}
           type="button"
           className="btn-icon"
           aria-label="Edit card"
@@ -117,6 +129,7 @@ function CardRow({ card }: { card: ActiveCardOut }) {
 function EditCard({ card, onDone }: { card: ActiveCardOut; onDone: () => void }) {
   const [question, setQuestion] = useState(card.question);
   const [answer, setAnswer] = useState(card.answer);
+  const questionRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const save = useMutation({
     ...updateCardMutation(),
@@ -127,6 +140,12 @@ function EditCard({ card, onDone }: { card: ActiveCardOut; onDone: () => void })
   });
   // The API rejects blank questions and answers, so keep Save disabled.
   const incomplete = question.trim() === "" || answer.trim() === "";
+
+  // The row's Edit button (which had focus) is replaced by this form; bring
+  // focus into the form so keyboard users stay in the editing task.
+  useEffect(() => {
+    questionRef.current?.focus();
+  }, []);
 
   return (
     <li className="panel">
@@ -146,8 +165,10 @@ function EditCard({ card, onDone }: { card: ActiveCardOut; onDone: () => void })
             Question
           </label>
           <input
+            ref={questionRef}
             id={`question-${card.id}`}
             className="field font-medium"
+            maxLength={MAX_CARD_TEXT}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
           />
@@ -160,6 +181,7 @@ function EditCard({ card, onDone }: { card: ActiveCardOut; onDone: () => void })
             id={`answer-${card.id}`}
             className="field"
             rows={3}
+            maxLength={MAX_CARD_TEXT}
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
           />
@@ -173,7 +195,7 @@ function EditCard({ card, onDone }: { card: ActiveCardOut; onDone: () => void })
           <button type="submit" className="btn-primary" disabled={incomplete || save.isPending}>
             {save.isPending ? "Saving…" : "Save"}
           </button>
-          <button type="button" className="btn-outline" onClick={onDone}>
+          <button type="button" className="btn-outline" onClick={onDone} disabled={save.isPending}>
             Cancel
           </button>
         </div>
@@ -189,6 +211,9 @@ function DeleteCard({ card, onDismiss }: { card: ActiveCardOut; onDismiss: () =>
     ...deleteCardMutation(),
     onSuccess: () => {
       onDismiss();
+      // The row and its Delete button disappear with the refetch; land focus
+      // on a surviving control instead of letting it fall out of the task.
+      document.getElementById("source-text")?.focus();
       void queryClient.invalidateQueries();
     },
   });

@@ -13,7 +13,8 @@ type ConfirmDialogProps = {
 
 /**
  * Modal confirmation, in the prototype's sheet language: dimmed scrim, card
- * surface, display-font heading. Escape, scrim click and the X all dismiss.
+ * surface, display-font heading. Escape, scrim click and the X all dismiss —
+ * unless a confirm is in flight, when every dismissal path is refused.
  */
 export function ConfirmDialog({
   title,
@@ -25,18 +26,37 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  // The control that opened the dialog; `undefined` = not captured yet. Held in
+  // a ref so StrictMode-style remounts don't re-capture the dialog's own buttons.
+  const openerRef = useRef<HTMLElement | null | undefined>(undefined);
+
+  // Focus the safe choice on open, and give focus back to the control that
+  // opened the dialog on close — unless focus already moved somewhere
+  // deliberate (e.g. the landing target after a successful confirm).
+  useEffect(() => {
+    if (openerRef.current === undefined) {
+      openerRef.current = document.activeElement as HTMLElement | null;
+    }
+    cancelRef.current?.focus();
+    return () => {
+      if (document.activeElement === document.body) openerRef.current?.focus();
+    };
+  }, []);
 
   useEffect(() => {
-    // Focus the safe choice, not the destructive one.
-    cancelRef.current?.focus();
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onDismiss();
+      // Escape is a dismissal, so it must respect `pending` like every other path.
+      if (e.key === "Escape" && !pending) onDismiss();
       if (e.key === "Tab") {
         // Keep focus inside the dialog while it is modal.
         const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
           "button:not([disabled]), [href], input, select, textarea",
         );
-        if (!focusable?.length) return;
+        if (!focusable?.length) {
+          // Nothing focusable (all controls disabled while pending): hold focus.
+          e.preventDefault();
+          return;
+        }
         const first = focusable[0]!;
         const last = focusable[focusable.length - 1]!;
         if (e.shiftKey && document.activeElement === first) {
@@ -50,13 +70,13 @@ export function ConfirmDialog({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onDismiss]);
+  }, [onDismiss, pending]);
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/35 p-4"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onDismiss();
+        if (e.target === e.currentTarget && !pending) onDismiss();
       }}
     >
       <div
@@ -70,13 +90,25 @@ export function ConfirmDialog({
           <h2 id="confirm-dialog-title" className="text-xl">
             {title}
           </h2>
-          <button type="button" className="btn-icon" aria-label="Close" onClick={onDismiss}>
+          <button
+            type="button"
+            className="btn-icon"
+            aria-label="Close"
+            onClick={onDismiss}
+            disabled={pending}
+          >
             <X aria-hidden="true" size={16} />
           </button>
         </div>
         <div className="space-y-2 text-sm text-ink-soft">{children}</div>
         <div className="flex justify-end gap-2">
-          <button ref={cancelRef} type="button" className="btn-outline" onClick={onDismiss}>
+          <button
+            ref={cancelRef}
+            type="button"
+            className="btn-outline"
+            onClick={onDismiss}
+            disabled={pending}
+          >
             Cancel
           </button>
           <button type="button" className="btn-danger" disabled={pending} onClick={onConfirm}>
