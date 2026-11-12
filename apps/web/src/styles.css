@@ -34,6 +34,10 @@ h3 {
   @apply btn bg-ink text-paper hover:bg-ink/90;
 }
 
+@utility btn-outline {
+  @apply btn border-line bg-card text-ink hover:border-ink hover:bg-card hover:text-ink;
+}
+
 @utility panel {
   @apply rounded-lg border border-line bg-card p-5;
 }

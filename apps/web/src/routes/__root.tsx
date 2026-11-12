@@ -7,6 +7,7 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
+import { LogOut } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { AuthProvider, RequireAuth, useAuth } from "#/auth";
@@ -100,7 +101,7 @@ function Layout() {
       </main>
     </RequireAuth>
   );
-}
+} 
 
 function Header() {
   const auth = useAuth();
@@ -112,7 +113,8 @@ function Header() {
         </Link>
         <div className="flex items-center gap-3 text-sm text-ink-soft">
           <span>{auth.user?.name}</span>
-          <button className="underline" onClick={auth.signOut}>
+          <button className="btn-outline" onClick={auth.signOut}>
+            <LogOut aria-hidden="true" size={16} />
             Sign out
           </button>
         </div>
