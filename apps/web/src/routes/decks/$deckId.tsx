@@ -9,6 +9,7 @@ import {
   listDecksOptions,
 } from "@rekalled/api-client/query";
 import { BandsBar, Score } from "#/components/score";
+import { ErrorState } from "#/components/error-state";
 
 export const Route = createFileRoute("/decks/$deckId")({ component: DeckPage });
 
@@ -28,9 +29,12 @@ function DeckPage() {
   if (deck.isPending) return <p>Loading…</p>;
   if (deck.isError) {
     return (
-      <p role="alert" className="text-sm text-red">
-        Could not load this deck. Reload the page to try again.
-      </p>
+      <ErrorState
+        onRetry={() => {
+          void deck.refetch();
+          void cards.refetch();
+        }}
+      />
     );
   }
   if (!deck.data) return <p>Deck not found.</p>;
@@ -53,11 +57,7 @@ function DeckPage() {
 
       <section className="space-y-2">
         <h2 className="text-2xl">Cards</h2>
-        {cards.isError && (
-          <p role="alert" className="text-sm text-red">
-            Could not load the cards for this deck.
-          </p>
-        )}
+        {cards.isError && <ErrorState onRetry={() => void cards.refetch()} />}
         {cards.data?.length === 0 && (
           <p className="text-ink-soft">No cards yet. Paste some text above.</p>
         )}

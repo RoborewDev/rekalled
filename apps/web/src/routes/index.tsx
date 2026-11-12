@@ -7,6 +7,7 @@ import {
   listDecksOptions,
   listDecksQueryKey,
 } from "@rekalled/api-client/query";
+import { ErrorState } from "#/components/error-state";
 import { BandsBar, Score } from "#/components/score";
 
 export const Route = createFileRoute("/")({ component: StudyToday });
@@ -18,9 +19,12 @@ function StudyToday() {
   // A failed request looks like an empty account otherwise: no due cards and no decks.
   if (summary.isError || decks.isError) {
     return (
-      <p role="alert" className="text-sm text-red">
-        Could not load your study data. Reload the page to try again.
-      </p>
+      <ErrorState
+        onRetry={() => {
+          void summary.refetch();
+          void decks.refetch();
+        }}
+      />
     );
   }
 
