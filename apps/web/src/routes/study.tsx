@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { StudyCard } from "@rekalled/api-client";
 import { getStudyQueueOptions, submitReviewMutation } from "@rekalled/api-client/query";
+import { ErrorState } from "#/components/error-state";
 import { opId } from "#/lib/query-keys";
 import {
   sessionReducer,
@@ -33,7 +34,7 @@ function StudyPage() {
   });
 
   if (queue.isPending) return <p>Loading cards…</p>;
-  if (queue.isError) return <p className="text-red">Could not load the queue.</p>;
+  if (queue.isError) return <ErrorState onRetry={() => void queue.refetch()} />;
   return <Session key={deckId ?? "all"} cards={queue.data} />;
 }
 

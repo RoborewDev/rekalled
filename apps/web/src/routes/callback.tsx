@@ -1,7 +1,12 @@
 import { SignInCallback } from "#/auth";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/callback")({ component: Callback });
+export const Route = createFileRoute("/callback")({
+  // The browser lands here mid-sign-in, before tokens exist: gating this route would
+  // dead-loop the Logto code exchange.
+  staticData: { public: true },
+  component: Callback,
+});
 
 function Callback() {
   const navigate = useNavigate();

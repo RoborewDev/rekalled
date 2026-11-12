@@ -1,3 +1,4 @@
+import logging
 from functools import lru_cache
 from typing import Annotated
 
@@ -8,10 +9,17 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.deps import SessionDep, SettingsDep
 from app.auth.dev import dev_principal
-from app.auth.logto import InvalidTokenError, JwksKeyResolver, LogtoTokenVerifier
+from app.auth.logto import (
+    InvalidTokenError,
+    JwksKeyResolver,
+    KeyServiceUnavailableError,
+    LogtoTokenVerifier,
+)
 from app.auth.principal import Principal
 from app.models import User
 from app.services.users import get_or_create_user
+
+logger = logging.getLogger(__name__)
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -56,7 +64,15 @@ async def get_principal(
         # PyJWKClient fetches keys with blocking I/O, so keep it off the event loop.
         return await run_in_threadpool(verifier.verify, credentials.credentials)
     except InvalidTokenError as exc:
+        # The reason only, never the token: this line names the cause of a 401 storm.
+        # %r escapes control characters: the reason can carry an attacker-chosen kid.
+        logger.warning("Rejected access token: %r", exc)
         raise _unauthorized("Invalid token") from exc
+    except KeyServiceUnavailableError as exc:
+        logger.error("Could not fetch Logto signing keys", exc_info=exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Authentication service unavailable"
+        ) from exc
 
 
 PrincipalDep = Annotated[Principal, Depends(get_principal)]

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as StudyRouteImport } from './routes/study'
 import { Route as DecksDeckIdRouteImport } from './routes/decks/$deckId'
@@ -18,6 +19,11 @@ import { Route as SourcesSourceIdRouteImport } from './routes/sources/$sourceId'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CallbackRoute = CallbackRouteImport.update({
@@ -43,6 +49,7 @@ const SourcesSourceIdRoute = SourcesSourceIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
   '/study': typeof StudyRoute
   '/decks/$deckId': typeof DecksDeckIdRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
   '/study': typeof StudyRoute
   '/decks/$deckId': typeof DecksDeckIdRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
   '/study': typeof StudyRoute
   '/decks/$deckId': typeof DecksDeckIdRoute
@@ -66,12 +75,24 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/callback' | '/study' | '/decks/$deckId' | '/sources/$sourceId'
+    | '/'
+    | '/about'
+    | '/callback'
+    | '/study'
+    | '/decks/$deckId'
+    | '/sources/$sourceId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/callback' | '/study' | '/decks/$deckId' | '/sources/$sourceId'
+  to:
+    | '/'
+    | '/about'
+    | '/callback'
+    | '/study'
+    | '/decks/$deckId'
+    | '/sources/$sourceId'
   id:
     | '__root__'
     | '/'
+    | '/about'
     | '/callback'
     | '/study'
     | '/decks/$deckId'
@@ -80,6 +101,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
   CallbackRoute: typeof CallbackRoute
   StudyRoute: typeof StudyRoute
   DecksDeckIdRoute: typeof DecksDeckIdRoute
@@ -93,6 +115,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/callback': {
@@ -128,6 +157,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   CallbackRoute: CallbackRoute,
   StudyRoute: StudyRoute,
   DecksDeckIdRoute: DecksDeckIdRoute,

@@ -98,6 +98,17 @@ Keep secrets out of the web image. Any public configuration that differs between
 
 In Infisical, also set `CORS_ORIGINS` to a JSON list of the web app's public origin, such as `["https://app.rekalled.app"]`. The API refuses to start in production when the list is empty, contains `*`, or contains a localhost or scheme-less entry.
 
+## The Logto proxy must let machine clients through
+
+The API downloads Logto's public signing keys on demand from `LOGTO_ENDPOINT`'s `/oidc/jwks` (and its discovery document). When Logto sits behind Cloudflare or a similar WAF, bot filters block those fetches — PyJWT's requests look like bots — and **every authenticated request fails**: the API cannot verify tokens. On staging (2026-11-12) this presented as a 401-and-reload loop; see [ADR-0001](../decisions/0001-auth-failure-handling.md).
+
+Two mitigations are in place: the JWKS client sends `User-Agent: rekalled-api`, and a key-fetch failure answers 503 (and logs at ERROR) instead of masquerading as an invalid token. But the proxy must also allow it:
+
+- Add a WAF **skip rule** (placed first) for the Logto host on `/oidc/jwks` and `/oidc/.well-known/` — public by design, no security loss.
+- Bot Fight Mode on a free Cloudflare plan cannot be bypassed by custom rules; either disable it for the zone or move the API's fetches to a non-proxied internal path.
+
+If auth breaks with `Could not fetch Logto signing keys` in the API logs, check the proxy first: Security → Events in the Cloudflare dashboard, filtered on the Logto host.
+
 ## Migrations and checks
 
 - API startup runs `alembic upgrade head` under a PostgreSQL advisory lock.

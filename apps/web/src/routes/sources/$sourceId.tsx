@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { CardOut } from "@rekalled/api-client";
 import { commitDraftsMutation, getSourceOptions } from "@rekalled/api-client/query";
+import { ErrorState } from "#/components/error-state";
 
 export const Route = createFileRoute("/sources/$sourceId")({ component: DraftCheck });
 
@@ -19,7 +20,7 @@ function DraftCheck() {
   const source = useQuery(getSourceOptions({ path: { source_id: sourceId } }));
 
   if (source.isPending) return <p>Loading drafts…</p>;
-  if (source.isError) return <p className="text-red">Could not load this source.</p>;
+  if (source.isError) return <ErrorState onRetry={() => void source.refetch()} />;
   const drafts = source.data.cards.filter((c) => c.status === "draft");
   return <DraftForm deckId={source.data.deck_id} sourceId={sourceId} drafts={drafts} />;
 }

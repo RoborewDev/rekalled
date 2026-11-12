@@ -39,6 +39,7 @@ just revision "add decks"
 ## Documentation
 
 - [Product specification](docs/spec/Flashcard%20Platform%20%E2%80%94%204-day%20Prototype%20Spec.md)
+- [Architecture decisions](docs/decisions/)
 - [Contributing](CONTRIBUTING.md)
 - [Deployment setup](docs/deployment/PLAN.md)
 - [Releases and rollback](docs/deployment/TAGS.md)

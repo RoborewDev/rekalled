@@ -46,7 +46,7 @@ describe("createAuthFetch", () => {
     expect(auth.signIn).not.toHaveBeenCalled();
   });
 
-  it("sends the user to sign in when the retry is also 401", async () => {
+  it("returns a repeated 401 instead of redirecting", async () => {
     const auth = fakeAuth(["stale", "still-bad"]);
     const baseFetch = vi.fn<typeof fetch>(async () => unauthorized());
 
@@ -54,6 +54,6 @@ describe("createAuthFetch", () => {
 
     expect(response.status).toBe(401);
     expect(baseFetch).toHaveBeenCalledTimes(2);
-    expect(auth.signIn).toHaveBeenCalledOnce();
+    expect(auth.signIn).not.toHaveBeenCalled();
   });
 });

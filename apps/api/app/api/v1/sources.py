@@ -67,6 +67,11 @@ async def regenerate_source(
     settings: SettingsDep,
 ) -> SourceOut:
     source = await generation.regenerate(
-        session, user, source_id, generator, max_cards=settings.max_cards
+        session,
+        user,
+        source_id,
+        generator,
+        max_cards=settings.max_cards,
+        max_per_day=settings.max_sources_per_day,
     )
     return await _source_out(session, source)

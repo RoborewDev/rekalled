@@ -5,8 +5,10 @@ import {
   Scripts,
   createRootRouteWithContext,
   useLocation,
+  useMatches,
 } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
+import { LogOut } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { AuthProvider, RequireAuth, useAuth } from "#/auth";
@@ -81,7 +83,6 @@ function ApiClient({ children }: { children: ReactNode }) {
   useMemo(() => {
     configureApi(apiUrl, {
       getAccessToken: (options) => latest.current.getAccessToken(options),
-      signIn: (returnTo) => latest.current.signIn(returnTo),
     });
   }, [apiUrl]);
 
@@ -89,8 +90,14 @@ function ApiClient({ children }: { children: ReactNode }) {
 }
 
 function Layout() {
+  // Public routes opt out by declaring staticData: { public: true }; everything else
+  // is gated. Protected is the default, so a forgotten declaration can never expose a page.
+  // Both hooks run unconditionally: an early return between them would change the hook
+  // count between public and protected navigations (Rules of Hooks).
+  const isPublic = useMatches().some((match) => match.staticData.public);
   const { pathname } = useLocation();
-  if (pathname === "/callback") return <Outlet />;
+
+  if (isPublic) return <Outlet />;
 
   return (
     <RequireAuth returnTo={pathname}>
@@ -112,7 +119,8 @@ function Header() {
         </Link>
         <div className="flex items-center gap-3 text-sm text-ink-soft">
           <span>{auth.user?.name}</span>
-          <button className="underline" onClick={auth.signOut}>
+          <button className="btn-outline" onClick={auth.signOut}>
+            <LogOut aria-hidden="true" size={16} />
             Sign out
           </button>
         </div>

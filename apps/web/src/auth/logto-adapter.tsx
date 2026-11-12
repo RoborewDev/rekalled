@@ -1,6 +1,7 @@
 import { LogtoProvider, useHandleSignInCallback, useLogto, type LogtoConfig } from "@logto/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AuthContext } from "./context";
+import { authStatus } from "./status";
 import { createTokenAccess, isInvalidGrant, type TokenAccess } from "./token-access";
 import type { AuthState, LogtoConfigValues } from "./types";
 
@@ -49,13 +50,17 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
   // not navigate), a later call can retry.
   const signInInFlight = useRef<Promise<void> | null>(null);
   const signIn = useCallback(
-    (returnTo?: string) => {
-      if (signInInFlight.current) return;
-      // Logto owns the redirect; we only remember where to land afterwards.
+    async (returnTo?: string): Promise<void> => {
+      // Extra callers while one is pending ride along on the same attempt; once it
+      // settles (the page did not navigate), a later call can retry.
+      const pending = signInInFlight.current;
+      if (pending) return pending;
+      // Logto owns the redirect; we only remember where to land afterwards. async, so a
+      // synchronous throw here (storage unavailable) reaches callers as a rejection too.
       sessionStorage.setItem(RETURN_TO_KEY, sanitizeReturnTo(returnTo));
       const attempt = logto.signIn(`${window.location.origin}/callback`);
       signInInFlight.current = attempt;
-      void attempt.finally(() => {
+      return attempt.finally(() => {
         if (signInInFlight.current === attempt) signInInFlight.current = null;
       });
     },
@@ -72,7 +77,8 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
       resource,
       () => {
         if (typeof window === "undefined") return;
-        signIn(window.location.pathname);
+        // Fire and forget: a dead session re-enters through the sign-in page anyway.
+        void signIn(window.location.pathname).catch(() => undefined);
       },
     );
   }
@@ -88,7 +94,7 @@ function LogtoBridge({ resource, children }: { resource: string; children: React
 
   const value = useMemo<AuthState>(
     () => ({
-      status: logto.isLoading ? "loading" : logto.isAuthenticated ? "signedIn" : "signedOut",
+      status: authStatus(logto),
       user: logto.isAuthenticated ? { name } : null,
       getAccessToken: (options) => tokenAccess.getAccessToken(options),
       signIn,

@@ -1,12 +1,16 @@
 from collections.abc import Callable
 
+import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_card_generator
 from app.core.config import Settings
 from app.generation.base import CardDraft, GenerationError
 from app.generation.fake import FailingCardGenerator, FakeCardGenerator
+from app.models import Source
 from tests.api_types import GenerationFailedJson, SourceJson, json_object
 from tests.helpers import TEXT, make_deck
 
@@ -69,6 +73,67 @@ async def test_sources_per_day_are_capped(
     assert third.status_code == 429
 
 
+async def test_regenerations_count_toward_the_daily_cap(
+    client: AsyncClient, override_settings: Callable[..., Settings]
+) -> None:
+    # Discarding all drafts and regenerating spends another model run, so the commit-empty
+    # loop must hit the same cap as creating sources does. The create already spent one of
+    # the two allowed runs, so exactly one regeneration fits.
+    _ = override_settings(max_sources_per_day=2)
+    deck_id = await make_deck(client)
+    source = json_object(
+        await client.post(f"/v1/decks/{deck_id}/sources", json={"text": TEXT}), SourceJson
+    )
+
+    assert (
+        await client.post(f"/v1/sources/{source['id']}/drafts/commit", json={"kept": []})
+    ).status_code == 200
+    assert (await client.post(f"/v1/sources/{source['id']}/generate")).status_code == 200
+
+    assert (
+        await client.post(f"/v1/sources/{source['id']}/drafts/commit", json={"kept": []})
+    ).status_code == 200
+    over = await client.post(f"/v1/sources/{source['id']}/generate")
+
+    assert over.status_code == 429
+
+
+async def test_a_capped_user_can_regenerate_a_source_that_already_has_cards(
+    client: AsyncClient, override_settings: Callable[..., Settings]
+) -> None:
+    # Reading back existing cards spends no model credit, so the daily cap must not
+    # 429 a regeneration that would not run the model anyway.
+    _ = override_settings(max_sources_per_day=1)
+    deck_id = await make_deck(client)
+    source = json_object(
+        await client.post(f"/v1/decks/{deck_id}/sources", json={"text": TEXT}), SourceJson
+    )
+
+    again = await client.post(f"/v1/sources/{source['id']}/generate")
+
+    assert again.status_code == 200
+    assert len(json_object(again, SourceJson)["cards"]) == 3
+
+
+async def test_failed_generations_do_not_count_against_the_daily_cap(
+    client: AsyncClient, app: FastAPI, override_settings: Callable[..., Settings]
+) -> None:
+    _ = override_settings(max_sources_per_day=1)
+    deck_id = await make_deck(client)
+    app.dependency_overrides[get_card_generator] = FailingCardGenerator
+
+    failed = await client.post(f"/v1/decks/{deck_id}/sources", json={"text": TEXT})
+
+    assert failed.status_code == 502
+    source_id = json_object(failed, GenerationFailedJson)["source_id"]
+
+    app.dependency_overrides[get_card_generator] = FakeCardGenerator
+    retried = await client.post(f"/v1/sources/{source_id}/generate")
+
+    assert retried.status_code == 200
+    assert len(json_object(retried, SourceJson)["cards"]) == 3
+
+
 async def test_failed_generation_keeps_the_source_and_can_be_retried(
     client: AsyncClient, app: FastAPI
 ) -> None:
@@ -84,6 +149,36 @@ async def test_failed_generation_keeps_the_source_and_can_be_retried(
     app.dependency_overrides[get_card_generator] = FakeCardGenerator
     retried = await client.post(f"/v1/sources/{source_id}/generate")
 
+    assert len(json_object(retried, SourceJson)["cards"]) == 3
+
+
+class CrashingCardGenerator:
+    async def generate(self, text: str, *, max_cards: int) -> list[CardDraft]:
+        # Interface parameters; this generator always fails before using them.
+        del text, max_cards
+        raise TimeoutError("model call timed out")
+
+
+async def test_unexpected_generation_failures_do_not_count_against_the_daily_cap(
+    client: AsyncClient,
+    app: FastAPI,
+    session: AsyncSession,
+    override_settings: Callable[..., Settings],
+) -> None:
+    # Only GenerationError releases the reservation; a raw library failure must not burn
+    # quota either, or the retry would get a spurious 429.
+    _ = override_settings(max_sources_per_day=1)
+    deck_id = await make_deck(client)
+    app.dependency_overrides[get_card_generator] = CrashingCardGenerator
+
+    with pytest.raises(TimeoutError):
+        _ = await client.post(f"/v1/decks/{deck_id}/sources", json={"text": TEXT})
+
+    app.dependency_overrides[get_card_generator] = FakeCardGenerator
+    source_id = await session.scalar(select(Source.id))
+    retried = await client.post(f"/v1/sources/{source_id}/generate")
+
+    assert retried.status_code == 200
     assert len(json_object(retried, SourceJson)["cards"]) == 3
 
 
