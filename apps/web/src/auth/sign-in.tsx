@@ -13,12 +13,21 @@ export function SignIn({ returnTo }: { returnTo: string }) {
   // Only the hosted flow leaves the page; dev mode signs in without a redirect, so the
   // overlay would only flash. If the Logto redirect never happens, a reload clears it.
   const [redirecting, setRedirecting] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const hosted = mode === "logto";
 
   const startSignIn = () => {
+    setFailed(false);
     if (hosted) setRedirecting(true);
-    auth.signIn(returnTo);
+    try {
+      auth.signIn(returnTo);
+    } catch {
+      // A synchronous failure (e.g. browser storage unavailable) must not leave the
+      // overlay up with the button disabled.
+      setRedirecting(false);
+      setFailed(true);
+    }
   };
 
   return (
@@ -42,6 +51,11 @@ export function SignIn({ returnTo }: { returnTo: string }) {
             <LogIn aria-hidden="true" size={16} />
             {hosted ? "Continue with Logto" : "Sign in"}
           </button>
+          {failed && (
+            <p role="alert" className="mt-3 text-xs text-red">
+              Sign-in could not start. Please try again.
+            </p>
+          )}
           <small className="mt-4 block text-xs text-ink-soft">
             {hosted
               ? "Hosted sign-in · OIDC + PKCE · no passwords stored here"

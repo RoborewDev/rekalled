@@ -87,17 +87,23 @@ async def regenerate(
     max_per_day: int,
 ) -> Source:
     source = await get_source(session, user, source_id)
-    # A regeneration spends model credit like a creation, so it shares the daily cap. The
-    # user lock is taken before the source lock below, matching create_source_and_generate.
-    await check_daily_quota(session, user, max_per_day)
+    # The user lock is taken before the source lock, matching create_source_and_generate.
+    # Advisory xact locks are re-entrant within a transaction, so check_daily_quota can
+    # re-acquire it below.
+    await _lock(session, f"user:{user.id}")
     # Hold the source lock across the emptiness check and the insert.
     await _lock(session, f"source:{source.id}")
-    if not await list_source_cards(session, source):
-        # One transaction from the quota count to the spend insert: atomic, like the
-        # create path, because there is no intermediate commit here.
-        spend = GenerationLog(owner_id=source.owner_id, source_id=source.id)
-        session.add(spend)
-        await _generate_drafts(session, source, generator, max_cards=max_cards, spend=spend)
+    if await list_source_cards(session, source):
+        # Existing cards need no model run, so no quota is spent: a capped user can still
+        # read them back (and retry a lost response to the last permitted generation).
+        return source
+    # A regeneration spends model credit like a creation, so it shares the daily cap. One
+    # transaction from the quota count to the spend insert: atomic, like the create path,
+    # because there is no intermediate commit here.
+    await check_daily_quota(session, user, max_per_day)
+    spend = GenerationLog(owner_id=source.owner_id, source_id=source.id)
+    session.add(spend)
+    await _generate_drafts(session, source, generator, max_cards=max_cards, spend=spend)
     return source
 
 
@@ -142,6 +148,14 @@ async def _generate_drafts(
         raise GenerationFailedError(
             "Card generation failed. Try again.", source_id=str(source.id)
         ) from exc
+    except Exception:
+        # GenerationError is the generator's own failure type; anything else (transport
+        # error, raw library error, draft validation) must not burn quota either. Release
+        # the reservation and let the unexpected error propagate as-is.
+        await session.delete(spend)
+        await session.commit()
+        logger.exception("Card generation raised unexpectedly for source %s", source.id)
+        raise
 
     session.add_all(
         Card(

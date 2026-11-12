@@ -65,7 +65,8 @@ async def get_principal(
         return await run_in_threadpool(verifier.verify, credentials.credentials)
     except InvalidTokenError as exc:
         # The reason only, never the token: this line names the cause of a 401 storm.
-        logger.warning("Rejected access token: %s", exc)
+        # %r escapes control characters: the reason can carry an attacker-chosen kid.
+        logger.warning("Rejected access token: %r", exc)
         raise _unauthorized("Invalid token") from exc
     except KeyServiceUnavailableError as exc:
         logger.error("Could not fetch Logto signing keys", exc_info=exc)
