@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import time
 from collections.abc import Callable, Mapping
 from typing import cast
@@ -17,7 +18,7 @@ from httpx import AsyncClient
 from jwt.algorithms import ECAlgorithm
 
 from app.auth.dependencies import get_token_verifier
-from app.auth.logto import InvalidTokenError, LogtoTokenVerifier
+from app.auth.logto import InvalidTokenError, JwksKeyResolver, LogtoTokenVerifier
 from app.core.config import Settings, get_settings
 
 ISSUER = "https://tenant.logto.app/oidc"
@@ -223,6 +224,58 @@ def test_the_real_resolver_fetches_the_settings_jwks_url(
     assert first == second
     assert first.subject == "logto-user-1"
     assert first.scopes == frozenset({"decks:read", "decks:write", "cards:generate"})
+
+
+def blocked_jwks(_self: jwt.PyJWKClient, _token: str | bytes) -> jwt.PyJWK:
+    # What a WAF in front of Logto looks like to PyJWT: the JWKS fetch itself fails.
+    raise jwt.PyJWKClientConnectionError(
+        'Fail to fetch data from the url, err: "HTTP Error 403: Forbidden"'
+    )
+
+
+async def test_unreachable_signing_keys_are_503_not_401(
+    app: FastAPI, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(jwt.PyJWKClient, "get_signing_key_from_jwt", blocked_jwks)
+    app.dependency_overrides[get_token_verifier] = lambda: LogtoTokenVerifier(
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        client_id=CLIENT_ID,
+        keys=JwksKeyResolver("https://tenant.logto.app/oidc/jwks"),
+    )
+
+    response = await client.get("/v1/me", headers=bearer(token()))
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Authentication service unavailable"
+
+
+async def test_a_rejected_token_logs_why_without_the_token(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    rejected = token(client_id="another-app")
+
+    with caplog.at_level(logging.WARNING, logger="app.auth.dependencies"):
+        response = await client.get("/v1/me", headers=bearer(rejected))
+
+    assert response.status_code == 401
+    assert "Token was issued to a different client" in caplog.text
+    assert rejected not in caplog.text
+
+
+def test_the_jwks_client_sends_an_explicit_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_client = jwt.PyJWKClient
+    captured: dict[str, object] = {}
+
+    def fake_client(uri: str, **kwargs: object):
+        captured.update(kwargs)
+        return real_client(uri, cache_keys=True, timeout=5)
+
+    monkeypatch.setattr(jwt, "PyJWKClient", fake_client)
+
+    _ = JwksKeyResolver("https://tenant.logto.app/oidc/jwks")
+
+    assert captured["headers"] == {"User-Agent": "rekalled-api"}
 
 
 def test_a_token_without_a_kid_is_rejected_by_the_real_resolver(

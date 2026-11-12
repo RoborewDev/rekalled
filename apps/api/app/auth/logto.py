@@ -14,6 +14,10 @@ class InvalidTokenError(Exception):
     pass
 
 
+class KeyServiceUnavailableError(Exception):
+    """The JWKS endpoint could not be reached: our outage, not a bad token."""
+
+
 class KeyResolver(Protocol):
     def key_for(self, token: str) -> AllowedPublicKeys: ...
 
@@ -23,11 +27,22 @@ class JwksKeyResolver:
 
     def __init__(self, jwks_url: str) -> None:
         # 5 s, not PyJWT's 30 s: a slow JWKS endpoint must not hang requests for long.
-        self._client: jwt.PyJWKClient = jwt.PyJWKClient(jwks_url, cache_keys=True, timeout=5)
+        # An explicit User-Agent: bot filters such as Cloudflare's block Python's default one.
+        self._client: jwt.PyJWKClient = jwt.PyJWKClient(
+            jwks_url,
+            cache_keys=True,
+            timeout=5,
+            headers={"User-Agent": "rekalled-api"},
+        )
 
     def key_for(self, token: str) -> AllowedPublicKeys:
+        try:
+            signing_key = self._client.get_signing_key_from_jwt(token)
+        except jwt.PyJWKClientConnectionError as exc:
+            # A 401 here would tell the client to sign in again; the fix is on our side.
+            raise KeyServiceUnavailableError(str(exc)) from exc
         # PyJWK.key is untyped in PyJWT, but from_jwk() only returns cryptography key objects.
-        return cast(AllowedPublicKeys, self._client.get_signing_key_from_jwt(token).key)
+        return cast(AllowedPublicKeys, signing_key.key)
 
 
 class LogtoTokenVerifier:
