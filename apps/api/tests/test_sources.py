@@ -69,6 +69,50 @@ async def test_sources_per_day_are_capped(
     assert third.status_code == 429
 
 
+async def test_regenerations_count_toward_the_daily_cap(
+    client: AsyncClient, override_settings: Callable[..., Settings]
+) -> None:
+    # Discarding all drafts and regenerating spends another model run, so the commit-empty
+    # loop must hit the same cap as creating sources does. The create already spent one of
+    # the two allowed runs, so exactly one regeneration fits.
+    _ = override_settings(max_sources_per_day=2)
+    deck_id = await make_deck(client)
+    source = json_object(
+        await client.post(f"/v1/decks/{deck_id}/sources", json={"text": TEXT}), SourceJson
+    )
+
+    assert (
+        await client.post(f"/v1/sources/{source['id']}/drafts/commit", json={"kept": []})
+    ).status_code == 200
+    assert (await client.post(f"/v1/sources/{source['id']}/generate")).status_code == 200
+
+    assert (
+        await client.post(f"/v1/sources/{source['id']}/drafts/commit", json={"kept": []})
+    ).status_code == 200
+    over = await client.post(f"/v1/sources/{source['id']}/generate")
+
+    assert over.status_code == 429
+
+
+async def test_failed_generations_do_not_count_against_the_daily_cap(
+    client: AsyncClient, app: FastAPI, override_settings: Callable[..., Settings]
+) -> None:
+    _ = override_settings(max_sources_per_day=1)
+    deck_id = await make_deck(client)
+    app.dependency_overrides[get_card_generator] = FailingCardGenerator
+
+    failed = await client.post(f"/v1/decks/{deck_id}/sources", json={"text": TEXT})
+
+    assert failed.status_code == 502
+    source_id = json_object(failed, GenerationFailedJson)["source_id"]
+
+    app.dependency_overrides[get_card_generator] = FakeCardGenerator
+    retried = await client.post(f"/v1/sources/{source_id}/generate")
+
+    assert retried.status_code == 200
+    assert len(json_object(retried, SourceJson)["cards"]) == 3
+
+
 async def test_failed_generation_keeps_the_source_and_can_be_retried(
     client: AsyncClient, app: FastAPI
 ) -> None:

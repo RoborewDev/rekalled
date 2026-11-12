@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     # SourceCreate rejects text above 200k, so a larger limit here would have no effect.
     max_source_chars: int = Field(default=20_000, gt=0, le=200_000)
     max_cards: int = Field(default=20, gt=0, le=1_000)
-    # Every Source spends model credit, so cap how many one user can add per 24 hours.
+    # Every model run spends credit — creating a Source or regenerating one — so cap how
+    # many generations one user can run per 24 hours. The env var keeps its historical
+    # name; it counts generations, not Sources.
     max_sources_per_day: int = Field(default=50, gt=0)
     # Browser origins allowed to call the API. Bearer tokens, no cookies, so no credentials.
     cors_origins: list[str] = ["http://localhost:3000"]

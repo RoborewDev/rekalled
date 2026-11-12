@@ -96,6 +96,27 @@ class Card(TimestampMixin, Base):
     lapses: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
+class GenerationLog(Base):
+    """Append-only ledger of successful model runs, one row per generation.
+
+    The daily quota counts these rows, not Source rows: a regeneration spends the same
+    model credit as a creation. source_id is SET NULL when the source goes, so deleting
+    a deck cannot reset a user's quota history.
+    """
+
+    __tablename__: str = "generation_logs"
+    __table_args__: tuple[Index, ...] = (
+        Index("ix_generation_logs_owner_created", "owner_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("sources.id", ondelete="SET NULL"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ReviewLog(Base):
     """Append-only. The id comes from the client, which makes POST /v1/reviews idempotent."""
 
