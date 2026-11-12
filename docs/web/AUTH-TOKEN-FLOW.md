@@ -36,13 +36,15 @@ sign-in instead of a storm.
 
 ## The pieces
 
-| File                                     | Role                                                                                                                                                                       |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web/src/auth/token-access.ts`      | Pure, injectable gate: serialization, sharing, terminal `invalid_grant` handling. No React, no Logto imports.                                                              |
-| `apps/web/src/auth/logto-adapter.tsx`    | Wires the gate into `LogtoBridge`; recovers swallowed SDK errors; redirects to sign-in on a dead session; shares one in-flight `signIn` attempt (the SDK does not dedupe). |
-| `apps/web/src/lib/auth-fetch.ts`         | Unchanged retry ladder: attaches Bearer token, on 401 forces one refresh + retry, on double-401 calls `signIn`.                                                            |
-| `apps/web/src/auth/token-access.test.ts` | Gate behavior with deterministic fakes (never real Logto), per [CONTRIBUTING](../../CONTRIBUTING.md).                                                                      |
-| `apps/web/src/lib/auth-fetch.test.ts`    | The 401 ladder, including the null-token path a dead session takes.                                                                                                        |
+| File                                      | Role                                                                                                                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/auth/token-access.ts`       | Pure, injectable gate: serialization, sharing, terminal `invalid_grant` handling. No React, no Logto imports.                                                              |
+| `apps/web/src/auth/status.ts`             | `authStatus`: signed-in stays signed-in while the SDK is busy (its `isLoading` is per-call, not per-session).                                                              |
+| `apps/web/src/auth/logto-adapter.tsx`     | Wires the gate into `LogtoBridge`; recovers swallowed SDK errors; redirects to sign-in on a dead session; shares one in-flight `signIn` attempt (the SDK does not dedupe). |
+| `apps/web/src/lib/auth-fetch.ts`          | Retry ladder: attaches Bearer token; on 401 forces one refresh + retry, then returns the response. Never redirects.                                                        |
+| `apps/web/src/components/error-state.tsx` | The shared failure screen every route shows when its queries error (bounded react-query retries first).                                                                    |
+| `apps/web/src/auth/token-access.test.ts`  | Gate behavior with deterministic fakes (never real Logto), per [CONTRIBUTING](../../CONTRIBUTING.md).                                                                      |
+| `apps/web/src/lib/auth-fetch.test.ts`     | The 401 ladder, including the null-token path a dead session takes.                                                                                                        |
 
 ## The gate (`token-access.ts`)
 
@@ -120,6 +122,13 @@ breaking that assumption: the effect above ignores `invalid_grant` while on the 
 route, and `sanitizeReturnTo` never hands back `/callback`, so a misattributed exchange
 error can neither flag the session dead nor corrupt the saved return path.
 
+`useLogto().isLoading` has the same per-call nature: it is true during **every** wrapped
+SDK call (`getAccessToken`, `clearAccessToken`, …), not only the initial session check.
+Mapping it straight to `"loading"` therefore made `RequireAuth` unmount the whole app on
+every token refresh — the aborted-request storm behind the staging incident.
+`authStatus` (`src/auth/status.ts`) reports `signedIn` whenever `isAuthenticated` holds,
+and is what the bridge uses for `AuthState.status`.
+
 ## What happens on the wire
 
 | Scenario                  | POSTs to `/oidc/token`                      | Result                                                                                     |
@@ -174,10 +183,12 @@ sequenceDiagram
 ```
 
 The effect fires within one React commit (~ms), normally before any API 401 could
-return. If it ever loses that race, the double-401 ladder in `auth-fetch.ts` is the
-backstop: a dead session resolves `null`, the request goes out unauthenticated, the API
-answers 401, the forced retry is short-circuited to `null` (no POST), and the second 401
-calls `signIn`. Bounded per query; the first navigation ends everything.
+return. It is the **only** thing that sends a user to sign-in on failure:
+`auth-fetch.ts` deliberately never redirects. A 401 after a forced refresh means
+signing in again cannot help (a misconfigured or failing API), and Logto would
+bounce the browser straight back into the same 401 — the loop this design removed.
+Instead the 401 reaches react-query, whose default retries (3, exponential backoff)
+end in the page's error state (`components/error-state.tsx`).
 
 The dead flag lives for the bridge instance, i.e. the page load. Sign-in is a full
 navigation, so the next load gets a fresh gate and fresh tokens — `dead` resets by
@@ -204,7 +215,11 @@ Manual checks (need `.env.local` Logto values; run with `just dev-logto`):
 
 - **No react-query global changes** (`retry`, refetch settings): the gate makes them
   moot, so they stay at library defaults.
-- **No API or infra changes**; the backend just sees fewer broken requests.
+- **API changes are limited to failure reporting.** An unreachable JWKS endpoint answers
+  503 instead of 401 (so an outage never looks like "please sign in again"), token
+  rejections are logged with the reason, and the JWKS client sends an explicit
+  `User-Agent` because bot filters block Python's default one. Verification behaviour is
+  unchanged.
 - **No Logto SDK upgrades.** If a future `@logto/react` rethrows errors, the rejection
   path simply becomes primary and the error-state effect never fires — no migration
   needed. If it keeps swallowing, the effect keeps covering it.
