@@ -24,4 +24,10 @@ declare module "@tanstack/react-router" {
   interface Register {
     router: ReturnType<typeof getRouter>;
   }
+
+  // Routes render without the auth gate when they declare staticData: { public: true }.
+  // Everything else is gated: a forgotten declaration walls a route off, never exposes it.
+  interface StaticDataRouteOption {
+    public?: boolean;
+  }
 }

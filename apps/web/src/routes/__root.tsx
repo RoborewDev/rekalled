@@ -5,6 +5,7 @@ import {
   Scripts,
   createRootRouteWithContext,
   useLocation,
+  useMatches,
 } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
@@ -90,8 +91,14 @@ function ApiClient({ children }: { children: ReactNode }) {
 }
 
 function Layout() {
+  // Public routes opt out by declaring staticData: { public: true }; everything else
+  // is gated. Protected is the default, so a forgotten declaration can never expose a page.
+  // Both hooks run unconditionally: an early return between them would change the hook
+  // count between public and protected navigations (Rules of Hooks).
+  const isPublic = useMatches().some((match) => match.staticData.public);
   const { pathname } = useLocation();
-  if (pathname === "/callback") return <Outlet />;
+
+  if (isPublic) return <Outlet />;
 
   return (
     <RequireAuth returnTo={pathname}>
@@ -101,7 +108,7 @@ function Layout() {
       </main>
     </RequireAuth>
   );
-} 
+}
 
 function Header() {
   const auth = useAuth();
